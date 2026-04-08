@@ -710,10 +710,10 @@ class PEnergyAnalysis:
                     M2.append(histogram_array[i].fitting.params[3])
                     energies_M2.append(self.energy_centres[i])
                     try:
-                        M1_err.append(histogram_array[i].fitting.errors[3])
+                        M1_err.append(histogram_array[i].fitting.errors[3]) # pas M2 err ????????????????????????
                     except AttributeError:
-                        M1_err.append(0)
-                except AttributeError:
+                        M1_err.append(0) # pas M2 error ???????? & mieux de mettre autre chose que pas d'erreur (0) ?? 
+                except AttributeError: 
                     pass
 
         elif (
@@ -779,6 +779,123 @@ class PEnergyAnalysis:
             plt.xscale("log")
 
         return fig
+
+
+
+    def WidthVsEnergy(self, integral=None):
+            if integral is None:
+                integral = self.integral
+
+            if integral:
+                if not self.do_integral:
+                    raise ValueError(
+                        "Energy Integral results not produced. Check if do_integral parameter is set to True"
+                    )
+
+                histogram_array = self.Parray_integral
+            else:
+                if not self.do_diff:
+                    raise ValueError(
+                        "Energy Differential results not produced. Check if do_diff parameter is set to True"
+                    )
+
+                histogram_array = self.Parray
+
+            W1 = []
+            W2 = []
+            W1_err = []
+            W2_err = []
+            energies_W1 = []
+            energies_W2 = []
+
+            # if histogram_array[0].fitting.model == "asym_dgaussian":
+            #     for i in range(0, len(self.energy_centres)):
+            #         try:
+            #             W1.append(histogram_array[i].fitting.params[0])
+            #             energies_W1.append(self.energy_centres[i])
+            #             try:
+            #                 W1_err.append(histogram_array[i].fitting.errors[0])
+            #             except AttributeError:
+            #                 W1_err.append(0)
+            #         except AttributeError:
+            #             pass
+
+            #         try:
+            #             M2.append(histogram_array[i].fitting.params[3])
+            #             energies_M2.append(self.energy_centres[i])
+            #             try:
+            #                 M1_err.append(histogram_array[i].fitting.errors[3]) # pas M2 err ????????????????????????
+            #             except AttributeError:
+            #                 M1_err.append(0) # pas M2 error ????????
+            #         except AttributeError:
+            #             pass
+
+            if (
+                histogram_array[0].fitting.model == "dgaussian"
+                or histogram_array[0].fitting.model == "lorentzian"
+            ):
+                for i in range(0, len(self.energy_centres)):
+                    try:
+                        W1.append(histogram_array[i].fitting.params[1])
+                        energies_W1.append(self.energy_centres[i])
+                        try:
+                            W1_err.append(histogram_array[i].fitting.errors[1])
+                        except AttributeError:
+                            W1_err.append(0)
+                    except AttributeError:
+                        pass
+
+                    try:
+                        W2.append(histogram_array[i].fitting.params[3])
+                        energies_W2.append(self.energy_centres[i])
+                        try:
+                            W2_err.append(histogram_array[i].fitting.errors[3])
+                        except AttributeError:
+                            W2_err.append(0)
+                    except AttributeError:
+                        pass
+
+            if len(W1) == 0 and len(W2) == 0:
+                print("No fit available for plottinSg")
+                return
+            elif len(W1) > 0 and len(W2) > 0:
+                nplots = 2
+            else:
+                nplots = 1
+
+            fig = plt.figure(figsize=(10, 5))
+            if len(W1) > 0:
+                plt.subplot(nplots, 1, 1)
+                plt.errorbar(energies_W1, W1, yerr=W1_err, fmt="o-", color="tab:orange")
+                plt.ylabel("Mean width")
+                plt.xticks(
+                    [0.02, 0.05, 0.08, 0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 1],
+                    labels=[20, 50, 80, 100, 200, 300, 400, 500, 700, 1000],
+                )
+                plt.xlabel("E (GeV)")
+                plt.title("P1 mean width")
+                plt.tight_layout()
+                plt.grid(which="both")
+                plt.xscale("log")
+
+            if len(W2) > 0:
+                plt.subplot(nplots, 1, nplots)
+                plt.errorbar(energies_W2, W2, yerr=W2_err, fmt="o-", color="tab:green")
+                plt.title("P2 mean width")
+                plt.ylabel("Mean width")
+                plt.xticks(
+                    [0.02, 0.05, 0.08, 0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 1],
+                    labels=[20, 50, 80, 100, 200, 300, 400, 500, 700, 1000],
+                )
+                plt.xlabel("E (GeV)")
+                plt.tight_layout()
+                plt.grid(which="both")
+                plt.xscale("log")
+
+            return fig
+
+
+    
 
     def PeaksVsEnergy(self, integral=None):
         plt.figure(figsize=(15, 4))
