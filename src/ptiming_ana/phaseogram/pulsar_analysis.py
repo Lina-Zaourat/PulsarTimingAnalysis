@@ -18,15 +18,22 @@ import pickle
 import yaml
 import logging
 import os
+from datetime import datetime #(LBZ)
 
-pd.options.mode.chained_assignment = None
+#pd.options.mode.chained_assignment = None
 
-LOG_FORMAT = "%(asctime)2s %(levelname)-6s [%(name)3s] %(message)s"
-logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt="%Y-%m-%d %H:%M:%S")
+#LOG_FORMAT = "%(asctime)2s %(levelname)-6s [%(name)3s] %(message)s"
+#logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt="%Y-%m-%d %H:%M:%S")
+
+# logging.basicConfig(
+#     level=logging.INFO,  # Minimum level of messages to log (INFO, WARNING, ERROR, etc.)
+#     format='%(asctime)s - %(levelname)s - %(message)s',  # Format: timestamp - level - message
+#     filename='pulsar_analysis.log'  # Log file name
+# )
 
 logger = logging.getLogger(__name__)
-logging.getLogger("matplotlib.font_manager").disabled = True
-logging.getLogger("gammapy").disabled = True
+#logging.getLogger("matplotlib.font_manager").disabled = True
+#logging.getLogger("gammapy").disabled = True
 
 __all__ = ["PulsarAnalysis"]
 
@@ -106,9 +113,11 @@ class PulsarAnalysis:
     # SETTINGS
     #############################################
 
-    def setFermiInputFile(self, filename):
+    #def setFermiInputFile(self, filename):
+    def setFermiInputFile(self, filename, date_cuts=None): #(LBZ)
         if "fits" in filename:
-            self.r = ReadFermiFile(filename)
+            #self.r = ReadFermiFile(filename)
+            self.r = ReadFermiFile(filename, date_cuts=date_cuts) #(LBZ)
             self.telescope = "fermi"
             self.energy_units = "GeV"
 
@@ -128,6 +137,7 @@ class PulsarAnalysis:
         target_radec=None,
         max_rad=0.2,
         zd_cuts=[0, 60],
+        date_cuts=None, #(LBZ)
         energy_dependent_theta=True,
     ):
         self.r = ReadDL3File(
@@ -135,13 +145,15 @@ class PulsarAnalysis:
             target_radec=target_radec,
             max_rad=max_rad,
             zd_cuts=zd_cuts,
+            date_cuts=date_cuts, #(LBZ)
             energy_dependent_theta=energy_dependent_theta,
         )
         self.telescope = "lst"
         self.energy_units = "TeV"
-
-    def setLSTInputFile(self, filename=None, dirname=None, src_dep=False):
-        self.r = ReadLSTFile(file=filename, directory=dirname, src_dependent=src_dep)
+    # def setLSTInputFile(self, filename=None, dirname=None, src_dep=False):
+    #     self.r = ReadLSTFile(file=filename, directory=dirname, src_dependent=src_dep)
+    def setLSTInputFile(self, filename=None, dirname=None, src_dep=False, date_cuts=None): #(LBZ)
+        self.r = ReadLSTFile(file=filename, directory=dirname, src_dependent=src_dep, date_cuts=date_cuts) #(LBZ)
         self.telescope = "lst"
         self.energy_units = "TeV"
 
@@ -158,6 +170,7 @@ class PulsarAnalysis:
         int_cut=None,
         energy_cut=None,
         energy_binning_cut=None,
+        date_cut=None, #(LBZ)
     ):
         self.cuts = FilterPulsarAna(
             gammaness_cut,
@@ -167,6 +180,7 @@ class PulsarAnalysis:
             int_cut,
             energy_cut,
             energy_binning_cut,
+            date_cut, #(LBZ)
         )
 
     def setEnergybinning(self, energy_edges, do_diff, do_integral):
@@ -220,6 +234,24 @@ class PulsarAnalysis:
         with open(configuration_file, "rb") as cfile:
             conf = yaml.safe_load(cfile)
 
+############################################################################## (LBZ)
+        # Convert date_range from ISO strings to Unix timestamps
+        date_cut = None
+        if "date_range" in conf["cuts"] and conf["cuts"]["date_range"] is not None:
+            date_range = conf["cuts"]["date_range"]
+            if isinstance(date_range, list) and len(date_range) == 2:
+                try:
+                    t_min = datetime.fromisoformat(date_range[0]).timestamp()
+                    t_max = datetime.fromisoformat(date_range[1]).timestamp()
+                    date_cut = [t_min, t_max]
+                    logger.info(f"Date range cut applied: {date_range[0]} to {date_range[1]}")
+                    #print(f"Date range cut applied: {date_range[0]} to {date_range[1]}")
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Could not parse date_range: {e}")
+                    #print(f"Could not parse date_range: {e}")
+############################################################################## (LBZ)
+
+
         # Read files
         self.filter_data = conf["cuts"]["filter_data"]
         if conf["flags"]["DL2_format"]:
@@ -227,11 +259,13 @@ class PulsarAnalysis:
                 self.setLSTInputFile(
                     dirname=conf["pulsar_file_dir"],
                     src_dep=conf["flags"]["src_dependent"],
+                    date_cuts=date_cut, # (LBZ)
                 )
             else:
                 self.setLSTInputFile(
                     filename=conf["pulsar_file_dir"],
                     src_dep=conf["flags"]["src_dependent"],
+                    date_cuts=date_cut,  #(LBZ)
                 )
 
             if conf["cuts"]["include_DL2_extra_cuts"]:
@@ -245,6 +279,7 @@ class PulsarAnalysis:
                             energy_binning_cut=conf["cuts"]["extra_cuts"][
                                 "energy_binning"
                             ],
+                            date_cut=date_cut, #(LBZ)
                         )
                     else:
                         self.setParamCuts(
@@ -255,6 +290,7 @@ class PulsarAnalysis:
                             energy_binning_cut=conf["cuts"]["extra_cuts"][
                                 "energy_binning"
                             ],
+                            date_cut=date_cut, #(LBZ)
                         )
                 else:
                     if conf["flags"]["src_dependent"]:
@@ -264,6 +300,7 @@ class PulsarAnalysis:
                             zd_cut=conf["cuts"]["zd_range"],
                             int_cut=conf["cuts"]["extra_cuts"]["intensity"],
                             energy_cut=conf["cuts"]["extra_cuts"]["energy"],
+                            date_cut=date_cut,  # (LBZ)
                         )
                     else:
                         self.setParamCuts(
@@ -272,13 +309,15 @@ class PulsarAnalysis:
                             zd_cut=conf["cuts"]["zd_range"],
                             int_cut=conf["cuts"]["extra_cuts"]["intensity"],
                             energy_cut=conf["cuts"]["extra_cuts"]["energy"],
+                            date_cut=date_cut, #(LBZ)
                         )
 
             else:
-                self.setParamCuts(zd_cut=conf["cuts"]["zd_range"])
+                self.setParamCuts(zd_cut=conf["cuts"]["zd_range"], date_cut=date_cut) # (LBZ)
 
         elif conf["flags"]["fits_format"]:
-            self.setFermiInputFile(filename=conf["pulsar_file_dir"])
+            #self.setFermiInputFile(filename=conf["pulsar_file_dir"])
+            self.setFermiInputFile(filename=conf["pulsar_file_dir"], date_cuts=date_cut) #(LBZ)
 
         else:
             self.is_DL3_input = True
@@ -287,9 +326,10 @@ class PulsarAnalysis:
                 target_radec=[conf["target"]["ra"], conf["target"]["dec"]],
                 max_rad=conf["cuts"]["max_rad"],
                 zd_cuts=conf["cuts"]["zd_range"],
+                date_cuts=date_cut, #(LBZ)
                 energy_dependent_theta=conf["cuts"]["energy_dependent_theta"],
             )
-            self.setParamCuts(energy_cut=conf["cuts"]["extra_cuts"]["energy"])
+            self.setParamCuts(energy_cut=conf["cuts"]["extra_cuts"]["energy"], date_cut=date_cut) #(LBZ)
 
         # Set regions
         self.setBackgroundLimits(conf["phase_regions"]["Bkg"])

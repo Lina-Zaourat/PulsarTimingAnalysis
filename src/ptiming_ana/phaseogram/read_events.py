@@ -17,7 +17,7 @@ from regions import PointSkyRegion
 
 logger = logging.getLogger(__name__)
 
-logging.getLogger("gammapy").disabled = True
+#logging.getLogger("gammapy").disabled = True
 
 __all__ = [
     "compute_theta2",
@@ -42,11 +42,12 @@ def compute_theta2(reco_src_x, reco_src_y, src_x, src_y):
 
 
 class ReadFermiFile:
-    def __init__(self, file):
+    def __init__(self, file, date_cuts=None): # (LBZ) pas sûre de l'utilité là (ajout de date_cuts=None)
         if "fits" not in file:
             raise ValueError("No FITS file provided for Fermi-LAT data")
         else:
             self.fname = file
+        self.date_cuts = date_cuts # (LBZ) pas sûre de l'utilité là 
 
     def read_file(self):
         f = fits.open(self.fname)
@@ -66,6 +67,27 @@ class ReadFermiFile:
             }
         )
         dataframe = dataframe.sort_values(by=["mjd_time"])
+        
+        ############################################################################### (LBZ)
+        # Apply date cuts PRE-FILTER at event level (for memory efficiency)
+        # NOTE: Fermi data is a single file without observation-level metadata (unlike DL3)
+        # So date filtering is applied at event level in create_df_from_info
+        # (consistent with LST architecture, unlike DL3 which filters at __init__)
+        # date_cuts are in Unix timestamp (seconds since 1970)
+        # mjd_time is in Modified Julian Date (days), needs conversion
+        if self.date_cuts is not None:
+            from astropy.time import Time
+            # Convert mjd_time (days) to Unix timestamps for comparison
+            mjd_unix = Time(dataframe["mjd_time"], format='mjd', scale='utc').unix
+            len_before = len(dataframe)
+            
+            if isinstance(self.date_cuts[0], (float, int)):
+                dataframe = dataframe[mjd_unix > self.date_cuts[0]]
+            if isinstance(self.date_cuts[1], (float, int)):
+                dataframe = dataframe[mjd_unix < self.date_cuts[1]]
+            len_after = len(dataframe)
+            logger.info(f"Fermi date pre-filter: {len_before} → {len_after} events")
+        ############################################################################## (LBZ) 
         self.info = dataframe
         return self.info
 
@@ -90,7 +112,8 @@ class ReadDL3File:
         directory=None,
         target_radec=None,
         max_rad=0.1,
-        zd_cuts=[0, 60],
+        zd_cuts=[0, 60], 
+        date_cuts=None, #(LBZ)
         energy_dependent_theta=True,
     ):
         if directory is not None:
@@ -99,13 +122,39 @@ class ReadDL3File:
 
         self.target_radec = target_radec
         self.energydep_radmax = energy_dependent_theta
+        self.date_cuts = date_cuts #(LBZ)
         self.info = None
 
+        # ZENITH ANGLE cut at observation level (like zd_cuts)
         d_zen_max = [self.datastore.obs_table["ZEN_PNT"] < zd_cuts[1]]
         d_zen_min = [self.datastore.obs_table["ZEN_PNT"] > zd_cuts[0]]
+        
 
-        self.ids = self.datastore.obs_table[d_zen_max[0] * d_zen_min[0]]["OBS_ID"]
-        self.zd_mask = d_zen_max[0] * d_zen_min[0]
+        ########################################################################### (LBZ)
+        # DATE cut at observation level (for consistency with zd_cuts)
+        obs_mask = d_zen_max[0] * d_zen_min[0]
+        
+        if self.date_cuts is not None:
+            # Convert date_cuts (Unix timestamp) to observation date range
+            # DL3 obs_table typically has DATE-OBS or similar columns
+            try:
+                # Try to get observation date boundaries
+                if "DATE-OBS" in self.datastore.obs_table.colnames:
+                    from astropy.time import Time
+                    obs_dates = Time(self.datastore.obs_table["DATE-OBS"], scale='utc').unix
+                    d_date_min = [obs_dates > self.date_cuts[0]]
+                    d_date_max = [obs_dates < self.date_cuts[1]]
+                    obs_mask = obs_mask * d_date_min[0] * d_date_max[0]
+                    logger.info(f"Date cut applied at reading files level: {obs_mask.sum()}/{len(self.datastore.obs_table)} runs remaining")
+            except (KeyError, Exception) as e:
+                logger.warning(f"Could not apply date cut at reading files level: {e}. Will apply at event level instead.")
+
+        self.ids = self.datastore.obs_table[obs_mask]["OBS_ID"]
+        self.zd_mask = obs_mask
+        ################################################################################# (LBZ) 
+
+        #self.ids = self.datastore.obs_table[d_zen_max[0] * d_zen_min[0]]["OBS_ID"]
+        #self.zd_mask = d_zen_max[0] * d_zen_min[0]
 
         if not self.energydep_radmax:
             self.max_rad = max_rad
@@ -152,6 +201,7 @@ class ReadDL3File:
     def calculate_tobs(self, mask=None):
         if mask is None:
             mask = self.zd_mask
+            #mask = self.obs_mask # (LBZ)
         return self.datastore.obs_table[mask]["LIVETIME"].data.sum() / 3600
 
     def create_dataframe(self):
@@ -176,6 +226,21 @@ class ReadDL3File:
         )
 
         info = add_delta_t_key(info)
+        
+        ######################################################################## (LBZ)
+        # Apply date cuts POST-FILTER at event level (safety check)
+        # NOTE: For DL3, date cut was ALREADY applied at observation level in __init__
+        # This is a secondary verification at event level for extra safety
+        # (consistency with event-level filtering in Fermi and LST)
+        if self.date_cuts is not None:
+            len_before = len(info)
+            if isinstance(self.date_cuts[0], (float, int)):
+                info = info[info["dragon_time"] > self.date_cuts[0]]
+            if isinstance(self.date_cuts[1], (float, int)):
+                info = info[info["dragon_time"] < self.date_cuts[1]]
+            len_after = len(info)
+            logger.info(f"DL3 date post-filter safety check at the events level: {len_before} → {len_after} events")
+        ######################################################################### (LBZ) 
 
         return info
 
@@ -195,7 +260,8 @@ class ReadDL3File:
 
 
 class ReadLSTFile:
-    def __init__(self, file=None, directory=None, src_dependent=False):
+    #def __init__(self, file=None, directory=None, src_dependent=False):
+    def __init__(self, file=None, directory=None, src_dependent=False, date_cuts=None): # LBZ (pas sûre de l'utilité )
         if file is None and directory is None:
             raise ValueError("No file provided")
         elif file is not None and directory is not None:
@@ -218,6 +284,7 @@ class ReadLSTFile:
 
         self.info = None
         self.src_dependent = src_dependent
+        self.date_cuts = date_cuts # LBZ (pas sûre de l'utilité)
 
     def add_phases(self, pname):
         dphase = pd.read_hdf(pname, key=dl2_params_lstcam_key)
@@ -347,6 +414,24 @@ class ReadLSTFile:
 
         else:
             df_filtered = pd.read_hdf(fname, key=dl2_params_lstcam_key)
+        
+        ############################################################################# (LBZ) 
+        # Apply date cuts PRE-FILTER at event level (for memory efficiency)
+        # NOTE: LST data is HDF5 file(s) without observation-level metadata (unlike DL3)
+        # So date filtering is applied at event level in read_LSTfile
+        # (consistent with Fermi architecture, unlike DL3 which filters at __init__)
+        # date_cuts are in Unix timestamp (seconds since 1970)
+        # dragon_time for LST is already in Unix timestamp format (native column)
+        if self.date_cuts is not None:
+            len_before = len(df_filtered)
+            if isinstance(self.date_cuts[0], (float, int)):
+                df_filtered = df_filtered[df_filtered["dragon_time"] > self.date_cuts[0]]
+            if isinstance(self.date_cuts[1], (float, int)):
+                df_filtered = df_filtered[df_filtered["dragon_time"] < self.date_cuts[1]]
+            len_after = len(df_filtered)
+            logger.info(f"LST date pre-filter: {len_before} → {len_after} events")
+        ############################################################################### (LBZ) 
+
         return df_filtered
 
     def calculate_tobs(self):
