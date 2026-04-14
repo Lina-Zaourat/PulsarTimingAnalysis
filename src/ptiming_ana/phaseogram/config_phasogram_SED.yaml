@@ -22,10 +22,9 @@ paths:
   
   # Complete runs folder identifier (auto-generated from DL3 dashboard)
   runs_folder_name: 'good_runs_Crab_210.40h_zmin0.0_zmax75.0_fisrtdate0_lastdate29990101_minangle0.35_maxangle0.45_phased'
-  
   # ========== SCRIPT EXECUTION PATHS ==========
   # Directory where SLURM job logs will be stored
-  log_output_dir: '/fefs/aswg/workspace/lina.bretonzaourat/Pulsars/add_phase/out'
+  log_output_dir: '/fefs/aswg/workspace/lina.bretonzaourat/PulsarTimingAnalysis/slurm_outputs/phasogram_script_outputs'
   
   # Path to the phasogram SLURM shell script
   shell_script_path: '/fefs/aswg/workspace/lina.bretonzaourat/PulsarTimingAnalysis/src/ptiming_ana/phaseogram/phasogram_slurm.sh'
@@ -94,9 +93,13 @@ cuts:
   energy_dependent_theta: True #True if apply energy-dep cuts on theta
   filter_data: True
   include_DL2_extra_cuts: False #True if apply cuts on DL2 files
-  ###########################""
-  zd_range: [0,75] # zentih angle 
-  date_range: ['2019-01-01', '2029-02-02'] # (LBZ) Date cut (ISO Format)
+  ###########################
+  # IMPORTANT: The following parameters (zd_range and date_range) are used to
+  # automatically generate a unique output folder name. This ensures that each
+  # different selection creates a separate phasogram without overwriting previous results.
+  # Format of output folder: ..._phasograms_zd{min}-{max}_date{YYYYMMDD}to{YYYYMMDD}/
+  zd_range: [60,75] # Zenith angle range in degrees (min, max)
+  date_range: ['2019-01-01', '2029-02-02'] # Date range in ISO Format (YYYY-MM-DD)
   ############################ 
   max_rad: 0.2 # Not used if energy_dependent_theta is True
 
