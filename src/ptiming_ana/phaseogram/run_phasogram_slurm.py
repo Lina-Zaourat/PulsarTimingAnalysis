@@ -62,6 +62,50 @@ def load_config(config_file):
         return yaml.safe_load(f)
 
 
+def generate_selection_suffix(config):
+    """
+    Generate a unique suffix for the output directory based on selection criteria.
+    
+    This function creates a suffix from the date range and zenith angle range
+    to ensure that different phasogram selections don't overwrite each other.
+    
+    Args:
+        config (dict): Configuration dictionary containing 'cuts' section.
+    
+    Returns:
+        str: A formatted suffix string (e.g., "_zd60-75_date2019-01-01to2029-02-02")
+             or empty string if cuts are not defined.
+    
+    Example:
+        suffix = generate_selection_suffix(config)
+        # Returns: "_zd60-75_date2019-01-01to2029-02-02"
+    """
+    cuts = config.get('cuts', {})
+    
+    if not cuts:
+        return ""
+    
+    suffix_parts = []
+    
+    # Extract zenith distance range
+    zd_range = cuts.get('zd_range', None)
+    if zd_range and isinstance(zd_range, list) and len(zd_range) == 2:
+        zd_min, zd_max = zd_range
+        suffix_parts.append(f"zmin{zd_min}_zmax{zd_max}")
+    
+    # Extract date range
+    date_range = cuts.get('date_range', None)
+    if date_range and isinstance(date_range, list) and len(date_range) == 2:
+        date_start = date_range[0].replace('-', '')  # Remove dashes for compactness
+        date_end = date_range[1].replace('-', '')
+        suffix_parts.append(f"firstdate{date_start}_lastdate{date_end}")
+    
+    # Return formatted suffix
+    if suffix_parts:
+        return "_" + "_".join(suffix_parts)
+    return ""
+
+
 def build_paths(config,config_file):
     """
     Construct all necessary directory paths from the configuration dictionary.
@@ -100,6 +144,11 @@ def build_paths(config,config_file):
     gheff = paths['gheff_cut']
     runs_folder = paths['runs_folder_name']
     
+    # ==================== GENERATE SELECTION SUFFIX ====================
+    # Generate suffix based on date and zenith angle selections
+    # This ensures each different selection creates a unique output folder
+    selection_suffix = generate_selection_suffix(config)
+    
     # ==================== BUILD INPUT DIRECTORY PATH ====================
     # Constructs the path to the directory containing processed DL3 files
     # with phase information already added (from add_DL3_phase.sh)
@@ -116,14 +165,15 @@ def build_paths(config,config_file):
     # ==================== BUILD OUTPUT DIRECTORY PATH ====================
     # Constructs the path where phasogram analysis results will be saved
     # (plots, tables, statistics, etc.)
+    # Now INCLUDES the selection suffix (dates and zenith angle)
     # Expected structure:
-    # {workspace}/results/preliminary/phasograms/{pulsar}/{gheff_cut}/{runs_folder}_phasograms/
+    # {workspace}/results/preliminary/phasograms/{pulsar}/{gheff_cut}/{runs_folder}_phasograms{selection_suffix}/
     output_dir = os.path.join(
         workspace,
         'results/preliminary/phasograms',
         pulsar,
         gheff,
-        f"{runs_folder}_phasograms/"
+        f"{runs_folder}_phasograms{selection_suffix}/"
     )
     
     # ==================== GET OPTIONAL PATHS ====================
