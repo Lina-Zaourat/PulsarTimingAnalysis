@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import lstchain
 import gammapy
+import yaml
+from ptiming_ana.phaseogram.path_utils import build_paths_from_config, output_file_from_dir #(LBZ) 
 
 # --- Logging Configuration ---
 # This sets up a log file to record all messages (INFO, WARNING, ERROR, etc.)
@@ -23,6 +25,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)  # Create a logger instance
 
+
 def main(config_path, output_dir=None):
     """
     Main function to generate phasograms.
@@ -30,17 +33,41 @@ def main(config_path, output_dir=None):
         config_path (str): Path to the configuration file.
         output_dir (str): Optional output directory for results. If None, plots are not saved.
     """
-    # --- Output Paths ---
-    # Construct the full path for results using the provided arguments.
-    #global_results_path = f'/fefs/aswg/workspace/lina.bretonzaourat/Crab_analysis_DL3_sourceIndep/results/preliminary/phasograms/Crab/{gheff_cut}/'
-    #results_path = os.path.join(global_results_path, results_output_name)
-    #os.makedirs(results_path, exist_ok=True)  # Create directory if it doesn't exist
-    #logger.info(f"Results directory: {results_path}")
-
     # --- Pulsar Analysis ---
     # Initialize the PulsarAnalysis object, set the config, and run the analysis.
     h = PulsarAnalysis()
     h.set_config(config_path)
+
+    # #(LBZ) Track whether output_dir came from CLI or was auto-computed
+    output_dir_from_cli = output_dir is not None
+
+    # If no explicit output_dir is provided, auto-compute it from the YAML paths/cuts.
+    if output_dir is None:
+        with open(config_path, "r", encoding="utf-8") as f:
+            conf = yaml.safe_load(f)
+        output_dir = build_paths_from_config(conf, config_file=config_path, script_dir=os.path.dirname(os.path.abspath(__file__)))["output_dir"]  #(LBZ)
+        logger.info(f"Auto-computed output directory from config: {output_dir}")  #(LBZ)
+
+    # --- Force output path from CLI when provided (SLURM mode) ---
+    # run_phasogram_slurm.py passes the dynamically generated folder with selection suffix.
+    # If output_dir is set, it must take priority over static YAML results paths.
+    if output_dir is not None:
+        output_file = output_file_from_dir(output_dir)
+
+        h.output_file = output_file
+        h.output_dir = os.path.dirname(output_file)
+        h.get_results = True
+
+        if not os.path.exists(h.output_dir):
+            logger.info(f"Creating output directory: {h.output_dir}")
+            os.makedirs(h.output_dir, exist_ok=True)
+
+        # #(LBZ) Differentiate between CLI-provided and auto-computed paths
+        if output_dir_from_cli:
+            logger.info(f"Output directory provided via CLI: {h.output_file}")
+        else:
+            logger.info(f"Using auto-computed output directory: {h.output_file}")  #(LBZ)
+
     h.run()  # This performs the core analysis
     logger.info("Global analysis completed.")
 

@@ -6,7 +6,6 @@ __all__ = ["FilterPulsarAna"]
 
 
 logger = logging.getLogger(__name__)
-logger.info('Test_filter_object')
 
 class FilterPulsarAna:
     def __init__(

@@ -3,25 +3,53 @@
 #######
 
 
-############################################################### (LBZ)
 ##################### PATHS CONFIGURATION #####################
 ###############################################################
 
+# -------------------------------------------------------------------------
+# PATHS USAGE 
+# 1) Set only this "paths" section to configure input/output/log/shell paths.
+# 2) Input root can be set with paths.input_root_dir (absolute) OR
+#    paths.input_rel_dir (relative to workspace_root).
+# 3) Output root can be set with paths.output_root_dir (absolute) OR
+#    paths.output_rel_dir (relative to workspace_root).
+# 4) Final directories are auto-built as:
+#    {input_root}/{pulsar_name}/{gheff_cut}/{theta_cont}/{runs_folder_name}
+#    {output_root}/{pulsar_name}/{gheff_cut}/{theta_cont}/{runs_folder_name}_phasograms_zmin..._zmax..._firstdate..._lastdate...
+# 4) Log directory uses paths.log_output_dir.
+# 5) Shell script path uses paths.shell_script_path.
+# 6) Legacy keys (pulsar_file_dir, results.output_*) are fallback only and can stay null.
+# -------------------------------------------------------------------------
+
 paths:
   # ========== ROOT CONFIGURATION ==========
-  # Workspace root directory
+  # Workspace root directory (only used if you choose the relative way to declare paths with input_rel_dir & output_rel_dir)
+  # Recommanded if the input data and the output results are in the same workspace
   workspace_root: '/fefs/aswg/workspace/lina.bretonzaourat/Crab_analysis_DL3_sourceIndep'
+
+  # Input/output roots (choose one strategy):
+
+  # relative strategy: set *_rel_dir (joined to workspace_root)
+  input_rel_dir: 'data/processed/DL3/Phased_pulsars'
+  output_rel_dir: 'results/preliminary/phasograms'
+
+  # (PRIORITY IF NOT NULL) absolute strategy: set *_root_dir and leave *_rel_dir unchanged/unused
+  input_root_dir: null
+  output_root_dir: null
   
   # ========== PULSAR IDENTIFICATION ==========
   # Target pulsar name
   pulsar_name: 'Crab'
   
   # ========== DATA SELECTION PARAMETERS ==========
-  # Gamma-ray efficiency cut level (gheffcut_0.9 or gheffcut_0.7)
-  gheff_cut: 'gheffcut_0.7'
+  # gheff cut level (gheffcut_0.9 or gheffcut_0.7) and thetacont level (gheffcut_0.9 or gheffcut_0.7)
+  # ONLY two options for now (standard DL3 used) 
+  gheff_cut: 'gheffcut_0.9'
+  theta_cont: 'thetacont_0.7'
   
-  # Complete runs folder identifier (auto-generated from DL3 dashboard)
-  runs_folder_name: 'good_runs_Crab_210.40h_zmin0.0_zmax75.0_fisrtdate0_lastdate29990101_minangle0.35_maxangle0.45_phased'
+  # Complete runs folder identifier (folder name where the runs .fits are stored)
+  runs_folder_name: 'Data_quality_Crab_gheff0.9_thetacont0.7_zmin0.0_zmax75.0_firstdate20200114_lastdate20251129_phased'
+
   # ========== SCRIPT EXECUTION PATHS ==========
   # Directory where SLURM job logs will be stored
   log_output_dir: '/fefs/aswg/workspace/lina.bretonzaourat/PulsarTimingAnalysis/slurm_outputs/phasogram_script_outputs'
@@ -29,10 +57,11 @@ paths:
   # Path to the phasogram SLURM shell script
   shell_script_path: '/fefs/aswg/workspace/lina.bretonzaourat/PulsarTimingAnalysis/src/ptiming_ana/phaseogram/phasogram_slurm.sh'
   
-  # ========== AUTO-GENERATED PATHS (used internally by run_phasogram_slurm.py) ==========
+  # ========== AUTO-GENERATED PATHS (used internally) ==========
   # These are built from the above parameters and should not be modified:
-  # input_dir:   {workspace_root}/data/processed/DL3/phased_pulsars/{pulsar_name}/{gheff_cut}/{runs_folder_name}
-  # output_dir:  {workspace_root}/results/preliminary/phasograms/{pulsar_name}/{gheff_cut}/{runs_folder_name}_phasograms
+  # input_dir:   {input_root}/{pulsar_name}/{gheff_cut}/{theta_cont}/{runs_folder_name}
+  # output_dir:  {output_root}/{pulsar_name}/{gheff_cut}/{theta_cont}/{runs_folder_name}_phasograms{selection_suffix}
+  # where selection_suffix = _zmin{zd_range[0]}_zmax{zd_range[1]}_firstdate{YYYYMMDD}_lastdate{YYYYMMDD} according two the cuts below 
 
 ############################################################################## (LBZ)
 
@@ -50,15 +79,11 @@ cphase_setting:
 ###############################################################
 
 # -------- FILE DIRECTORY -----------
-#pulsar_file_dir: '/fefs/aswg/workspace/vincent.poireau/Crab/gheff0.7_thetacont0.7/'
-######################################################################################################################################################""
-pulsar_file_dir: '/fefs/aswg/workspace/lina.bretonzaourat/Crab_analysis_DL3_sourceIndep/data/processed/DL3/phased_pulsars/Crab/gheffcut_0.7/good_runs_Crab_210.40h_zmin0.0_zmax75.0_fisrtdate0_lastdate29990101_minangle0.35_maxangle0.45_phased'
-results_output_directory: '/fefs/aswg/workspace/lina.bretonzaourat/Crab_analysis_DL3_sourceIndep/results/preliminary/phasograms/Crab/gheffcut_0.7/good_runs_Crab_210.40h_zmin0.0_zmax75.0_fisrtdate0_lastdate29990101_minangle0.35_maxangle0.45_phased/'
-
-
-target:
-######################################################################################################################################################
-DL4_directory: '/fefs/aswg/workspace/lina.bretonzaourat/Crab_analysis_DL3_sourceIndep/results/preliminary/phasograms/Crab/good_runs_Crab_210.40h_zmin0.0_zmax75.0_fisrtdate0_lastdate29990101_minangle0.35_maxangle0.45_phased/'
+# For DL3 phaseogram workflow, input/output paths are auto-built from the paths section.
+# Keep this key only for legacy/manual workflows (DL2/FITS) if needed.
+pulsar_file_dir: null
+results_output_directory: null
+DL4_directory: null
 
 target:
   name: Crab
@@ -98,13 +123,13 @@ cuts:
   # automatically generate a unique output folder name. This ensures that each
   # different selection creates a separate phasogram without overwriting previous results.
   # Format of output folder: ..._phasograms_zd{min}-{max}_date{YYYYMMDD}to{YYYYMMDD}/
-  zd_range: [60,75] # Zenith angle range in degrees (min, max)
-  date_range: ['2019-01-01', '2029-02-02'] # Date range in ISO Format (YYYY-MM-DD)
+  zd_range: [35,55] # Zenith angle range in degrees (min, max)
+  date_range: ['2019-12-14', '2025-12-29'] # Date range in ISO Format (YYYY-MM-DD)
   ############################ 
   max_rad: 0.2 # Not used if energy_dependent_theta is True
 
 
-  # Traitement DL2 (déjà sélectionné pour DL3)
+  # Traitement DL2 (already selected for DL3)
   extra_cuts: #VP, extra cuts to be applied if include_DL2_extra_cuts = True, except energy cuts which applies also to DL3 files
     energy_dependent: False #True if energy-dep cuts (set the energy binning at the end)
     energy: 0 #VP Set to 0 if no energy cuts (or [X,Y] if want to apply cuts on the energy range) => Applied to DL3 files as well
@@ -153,11 +178,11 @@ fitting:
 
 
 results:
-   save_results: True #VP set to False because this could introduce a failure in the analysis (NaN for the stat tests)
-   ###################################################################################################################################""
-   output_file: '/fefs/aswg/workspace/lina.bretonzaourat/Crab_analysis_DL3_sourceIndep/results/preliminary/phasograms/Crab/gheffcut_0.7/good_runs_Crab_210.40h_zmin0.0_zmax75.0_fisrtdate0_lastdate29990101_minangle0.35_maxangle0.45_phased/phasogram.pdf'
-   output_directory: '/fefs/aswg/workspace/lina.bretonzaourat/Crab_analysis_DL3_sourceIndep/results/preliminary/phasograms/Crab/gheffcut_0.7/good_runs_Crab_210.40h_zmin0.0_zmax75.0_fisrtdate0_lastdate29990101_minangle0.35_maxangle0.45_phased/phasogram.pdf'
-   ##################################################################################################################################
+  save_results: True #VP set to False because this could introduce a failure in the analysis (NaN for the stat tests)
+  # Output path is auto-built from paths + cuts (single source of truth).
+  # Legacy fallback keys kept null for backward compatibility only.
+  output_file: null
+  output_directory: null
 
 
 ###############################################################

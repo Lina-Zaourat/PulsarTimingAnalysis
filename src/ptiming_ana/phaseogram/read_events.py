@@ -128,11 +128,14 @@ class ReadDL3File:
         # ZENITH ANGLE cut at observation level (like zd_cuts)
         d_zen_max = [self.datastore.obs_table["ZEN_PNT"] < zd_cuts[1]]
         d_zen_min = [self.datastore.obs_table["ZEN_PNT"] > zd_cuts[0]]
+        logger.info(f"Zenith angle range cut applied: [{zd_cuts[0]},{zd_cuts[1]}]") #(LBZ)
         
 
         ########################################################################### (LBZ)
         # DATE cut at observation level (for consistency with zd_cuts)
-        obs_mask = d_zen_max[0] * d_zen_min[0]
+        obs_mask = d_zen_max[0] * d_zen_min[0] 
+        logger.info(f"Zenith angle cut applied at reading files level: {obs_mask.sum()}/{len(self.datastore.obs_table)} runs remaining")
+
         
         if self.date_cuts is not None:
             # Convert date_cuts (Unix timestamp) to observation date range

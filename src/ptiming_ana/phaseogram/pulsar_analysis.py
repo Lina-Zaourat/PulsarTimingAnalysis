@@ -14,6 +14,7 @@ from .phasebinning import PhaseBinning
 from .penergy_analysis import PEnergyAnalysis
 from .filter_object import FilterPulsarAna
 from .read_events import ReadDL3File, ReadFermiFile, ReadLSTFile, ReadList
+from .path_utils import build_paths_from_config, output_file_from_dir #(LBZ) 
 import pickle
 import yaml
 import logging
@@ -234,6 +235,20 @@ class PulsarAnalysis:
         with open(configuration_file, "rb") as cfile:
             conf = yaml.safe_load(cfile)
 
+########################################################################### (LBZ)
+        built_paths = build_paths_from_config(
+            conf,
+            config_file=configuration_file,
+            script_dir=os.path.dirname(os.path.abspath(__file__)),
+        )
+
+        # Prefer canonical path-building from the paths section when available.
+        # This removes hardcoded per-user absolute paths from the runtime flow.
+        if built_paths.get("input_dir"):
+            conf["pulsar_file_dir"] = built_paths["input_dir"]
+
+########################################################################### (LBZ)
+
 ############################################################################## (LBZ)
         # Convert date_range from ISO strings to Unix timestamps
         date_cut = None
@@ -391,10 +406,20 @@ class PulsarAnalysis:
         # Set output file for results
         self.get_results = conf["results"]["save_results"]
         if self.get_results:
-            try:
-                self.output_file = conf["results"]["output_directory"]
-            except AttributeError:
+            ################################################################################## (LBZ)
+            # Single source: output directory derived from paths + cuts.
+            # If missing, fallback to legacy keys for backward compatibility.
+            if built_paths.get("output_dir"):
+                self.output_file = output_file_from_dir(built_paths["output_dir"])
+            elif "output_file" in conf["results"]:
                 self.output_file = conf["results"]["output_file"]
+            elif "output_directory" in conf["results"]:
+                self.output_file = output_file_from_dir(conf["results"]["output_directory"])
+            else:
+                raise ValueError(
+                    "Missing output path. Define paths.* in config or legacy results.output_file"
+                )
+        ################################################################################## (LBZ)
 
             self.output_dir = os.path.dirname(self.output_file)
             if not os.path.exists(self.output_dir):
@@ -625,6 +650,11 @@ class PulsarAnalysis:
             fig = self.EnergyAna.MeanVsEnergy(integral)
             return fig
 
+    # def show_WidthVsEnergy(self, integral=None): # (LBZ)
+    #     if self.check_energyana(): # (LBZ)
+    #         fig = self.EnergyAna.WidthVsEnergy(integral) # (LBZ)
+    #         return fig # (LBZ)
+
     def show_FWHMVsEnergy(self, integral=None):
         if self.check_energyana():
             fig = plt.figure()
@@ -713,9 +743,13 @@ class PulsarAnalysis:
 
                 fitting = self.fitting.show_result()
                 fitting.to_hdf(self.output_dir + "/overall_fitting.h5", key="results")
+                # fig_width = self.show_WidthVsEnergy()  # (LBZ)
+                # if fig_width is not None:
+                #     pdf.savefig(fig_width, bbox_inches="tight", pad_inches=1)
 
             try:
                 pdf.savefig(self.show_EnergyAna(), bbox_inches="tight", pad_inches=1)
+                #pdf.savefig(self.show_meanVsEnergy(), bbox_inches="tight", pad_inches=1)  #(LBZ) Add Mean vs Energy plot
                 for i in range(0, len(self.EnergyAna.show_Energy_lightcurve())):
                     pdf.savefig(
                         self.EnergyAna.show_Energy_lightcurve()[i],
