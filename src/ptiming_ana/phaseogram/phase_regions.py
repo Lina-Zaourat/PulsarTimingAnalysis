@@ -215,17 +215,44 @@ class PulsarPeak:
     # Make statistics if the region is signal type only
     def make_stats(self, regions, tobs):
         if self.type == "signal":
-            stats, yerror, noff = calculate_CountStats(
-                self.phases,
-                off_file=regions.OFF.phases,
-                factor=(self.deltaP) / regions.OFF.deltaP,
-            )
-            self.sign = stats.sqrt_ts.item()
-            self.Nex = stats.n_sig
-            self.yerr = yerror
-            self.sign_ratio = self.sign / np.sqrt(tobs)
-            self.s_n_ratio = self.Nex / np.sqrt(noff)
-            self.noff = noff
+            # (LBZ) OPTION 1: Original version (currently active)
+            # stats, yerror, noff = calculate_CountStats(
+            #     self.phases,
+            #     off_file=regions.OFF.phases,
+            #     factor=(self.deltaP) / regions.OFF.deltaP,
+            # )
+            # self.sign = stats.sqrt_ts.item()
+            # self.Nex = stats.n_sig
+            # self.yerr = yerror
+            # self.sign_ratio = self.sign / np.sqrt(tobs)
+            # self.s_n_ratio = self.Nex / np.sqrt(noff)
+            # self.noff = noff
+
+            # (LBZ) OPTION 2: Enhanced version with error handling (commented out - to be tested)
+            try:
+                stats, yerror, noff = calculate_CountStats(
+                    self.phases,
+                    off_file=regions.OFF.phases,
+                    factor=(self.deltaP) / regions.OFF.deltaP,
+                )
+                self.sign = stats.sqrt_ts.item()
+                self.Nex = stats.n_sig
+                self.yerr = yerror
+                self.sign_ratio = self.sign / np.sqrt(tobs)
+                self.s_n_ratio = self.Nex / np.sqrt(noff)
+                self.noff = noff
+            except Exception as e:
+                # Handle cases where stats cannot be calculated (e.g., too few events, empty regions)
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Could not calculate statistics for {getattr(self, 'name', 'unknown peak')}: {e}. Using default values.")
+                # Set default values to prevent AttributeError
+                self.sign = 0.0
+                self.Nex = 0.0
+                self.yerr = 0.0
+                self.sign_ratio = 0.0
+                self.s_n_ratio = 0.0
+                self.noff = 0.0
 
         else:
             print("Cannot calculate statistics for a background region")

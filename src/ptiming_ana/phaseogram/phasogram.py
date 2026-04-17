@@ -12,7 +12,15 @@ import numpy as np
 import lstchain
 import gammapy
 import yaml
-from ptiming_ana.phaseogram.path_utils import build_paths_from_config, output_file_from_dir #(LBZ) 
+
+# (LBZ) Attempt absolute import first (when run directly), fall back to relative import (when run as module)
+try:
+    from ptiming_ana.phaseogram.path_phasogram_utils import build_phasogram_output_dir, output_file_from_dir
+except (ImportError, ModuleNotFoundError):
+    try:
+        from .path_phasogram_utils import build_phasogram_output_dir, output_file_from_dir
+    except (ImportError, ModuleNotFoundError):
+        raise ImportError("Could not import path_phasogram_utils. Make sure PulsarTimingAnalysis is installed.") 
 
 # --- Logging Configuration ---
 # This sets up a log file to record all messages (INFO, WARNING, ERROR, etc.)
@@ -45,7 +53,7 @@ def main(config_path, output_dir=None):
     if output_dir is None:
         with open(config_path, "r", encoding="utf-8") as f:
             conf = yaml.safe_load(f)
-        output_dir = build_paths_from_config(conf, config_file=config_path, script_dir=os.path.dirname(os.path.abspath(__file__)))["output_dir"]  #(LBZ)
+        output_dir = build_phasogram_output_dir(conf, config_file=config_path, script_dir=os.path.dirname(os.path.abspath(__file__)))["output_dir"]  #(LBZ)
         logger.info(f"Auto-computed output directory from config: {output_dir}")  #(LBZ)
 
     # --- Force output path from CLI when provided (SLURM mode) ---
@@ -126,8 +134,14 @@ def main(config_path, output_dir=None):
     # --- Energy Statistics ---
     # Display and log energy bin statistics.
     energy_results = h.show_EnergyPresults(integral=True)
-    peak_stats_bin1 = energy_results[0][0]
-    peak_stats_bin2 = energy_results[0][1]
+    # energy_results is now a list of (peak_stat, p_stat) tuples for each energy bin
+    if energy_results:
+        peak_stats_bin1 = energy_results[0][0]
+        peak_stats_bin2 = energy_results[0][1]
+        logger.info(f"First energy bin peak statistics:\n{peak_stats_bin1}")
+        logger.info(f"Total energy bins processed: {len(energy_results)}")
+    else:
+        logger.warning("No valid energy bin statistics to display")
     logger.info(f"First energy bin: {h.EnergyAna.energy_edges[0]*1000:.1f} GeV - {h.EnergyAna.energy_edges[1]*1000:.1f} GeV")
 
     # --- (Sigma, FWMH, P1/P2) vs Energy ---
@@ -156,7 +170,7 @@ def main(config_path, output_dir=None):
 
     # --- Energy Fit Results ---
     # Display and log fit results per energy bin.
-    fit_results_vs_energy = h.show_EnergyFitresults()
+    fit_results_vs_energy = h.show_Energy_fitresults()
     logger.info("Fit results per energy bin displayed.")
 
 if __name__ == "__main__":

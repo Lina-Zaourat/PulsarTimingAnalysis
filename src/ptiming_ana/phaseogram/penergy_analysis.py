@@ -16,7 +16,7 @@ class PEnergyAnalysis:
     Parameters
     ----------
     dataframe : dataframe containing info
-        DL2 LST file after the quality selection. Set daraframe to False if it is not available and want to set the attributes manually.
+        DL2 LST file after the quality selection. Set dataframe to False if it is not available and want to set the attributes manually.
     energy_edges: List of float
         Edges of the energy binning (in TeV)
     pdata : List of float
@@ -56,7 +56,7 @@ class PEnergyAnalysis:
     stats: PeriodicityTest object
         Information of Statistical Tests for searching Periodicity
     fitting: PeakFitting object
-        Information abot the fitting used for the peaks
+        Information about the fitting used for the peaks
     """
 
     def __init__(self, energy_edges, do_diff=True, do_integral=False):
@@ -82,10 +82,13 @@ class PEnergyAnalysis:
     def run(self, pulsarana):
         self.energy_units = pulsarana.energy_units
         self.tobs = pulsarana.tobs
+        
+        # (LBZ) Initialize both arrays to avoid AttributeError if one mode is disabled
+        self.Parray = [] #(LBZ)
+        self.Parray_integral = [] #(LBZ)
 
         if self.do_diff:
             # Create array of PulsarPhases objects binning in energy
-            self.Parray = []
             for i in range(0, len(self.energy_edges) - 1):
                 dataframe = pulsarana.info
                 di = dataframe[
@@ -93,59 +96,109 @@ class PEnergyAnalysis:
                     & (dataframe["energy"] < self.energy_edges[i + 1])
                 ]
 
+                # (LBZ) Check if bin has enough events (minimum 10 events for statistics)
+                min_events_threshold = 10 ######################## WARNING has to be improved to pass it in config !!!!!!!!!!!!!!!!!!!!!! ################
+                if len(di) < min_events_threshold:
+                    logger.warning(
+                        f"Skipping energy bin {self.energy_edges[i]:.2f}-{self.energy_edges[i+1]:.2f} {self.energy_units}: "
+                        f"only {len(di)} events (< {min_events_threshold} threshold)"
+                    )
+                    continue
+                ################################################################################# (LBZ)
+
                 logger.info(
-                    "Creating object in "
-                    + "energy range ("
-                    + self.energy_units
-                    + f"):{self.energy_edges[i]:.2f}-{self.energy_edges[i+1]:.2f}"
+                    f"Creating object in energy range ({self.energy_units}):{self.energy_edges[i]:.2f}-{self.energy_edges[i+1]:.2f} "
+                    f"with {len(di)} events (>= {min_events_threshold} threshold)"
                 )
-                self.Parray.append(copy.copy(pulsarana))
-                self.Parray[i].setTimeInterval(self.Parray[i].tint)
-                self.Parray[i].phases = np.array(di["pulsar_phase"].to_list())
-                self.Parray[i].info = di
+                self.Parray.append(copy.copy(pulsarana)) #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
+                self.Parray[-1]._energy_bin_index = i  # (LBZ) Track original energy bin index for visualization after skipped bins
+                self.Parray[-1].setTimeInterval(self.Parray[-1].tint) #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
+                self.Parray[-1].phases = np.array(di["pulsar_phase"].to_list()) #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
+                self.Parray[-1].info = di #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
 
-                self.Parray[i].init_regions()
+                self.Parray[-1].init_regions() #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
 
-                if self.Parray[i].do_fit:
-                    self.Parray[i].setFittingParams(
-                        self.Parray[i].fit_model,
-                        self.Parray[i].binned,
-                        peak=self.Parray[i].peak,
+                if self.Parray[-1].do_fit: #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
+                    self.Parray[-1].setFittingParams( #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
+                        self.Parray[-1].fit_model, #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
+                        self.Parray[-1].binned, #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
+                        peak=self.Parray[-1].peak, #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
                     )
 
                 # Update the information every 1 hour and store final values
                 logger.info("Calculating statistics...")
-                self.Parray[i].execute_stats(self.tobs)
+                try:
+                    self.Parray[-1].execute_stats(self.tobs) #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
+                except (ZeroDivisionError, ValueError, RuntimeError) as e:
+                    logger.warning(
+                        f"Energy bin {self.energy_edges[i]:.2f}-{self.energy_edges[i+1]:.2f} TeV: "
+                        f"Error during statistics calculation ({type(e).__name__}). "
+                        f"This bin will be kept in results but fitting was skipped."
+                    )
+                    # Bin stays in Parray - fitting was skipped for this bin due to sparse data or fitting issues
+
+        # (LBZ) Summary of differential binning
+        if self.do_diff:
+            total_diff_events = sum(len(obj.info) for obj in self.Parray)
+            logger.info(
+                f"Energy differential binning complete: {len(self.Parray)} bins created "
+                f"(out of {len(self.energy_edges)-1} total energy bins) "
+                f"with total {total_diff_events} events"
+            )
 
         if self.do_integral:
-            self.Parray_integral = []
             for i in range(0, len(self.energy_edges) - 1):
                 dataframe = pulsarana.info
                 di = dataframe[(dataframe["energy"] > self.energy_edges[i])]
 
+                # (LBZ) Check if bin has enough events (minimum 10 events for statistics)
+                min_events_threshold = 10
+                if len(di) < min_events_threshold:
+                    logger.warning(
+                        f"Skipping integral energy bin E > {self.energy_edges[i]:.2f} {self.energy_units}: "
+                        f"only {len(di)} events (< {min_events_threshold} threshold)"
+                    )
+                    continue
+                ################################################################################### #(LBZ) energy bin low events modification 
                 logger.info(
-                    "Creating object in "
-                    + "energy range ("
-                    + self.energy_units
-                    + f"):E > {self.energy_edges[i]:.2f}"
+                    f"Creating object in energy range ({self.energy_units}):E > {self.energy_edges[i]:.2f} "
+                    f"with {len(di)} events (>= {min_events_threshold} threshold)"
                 )
                 self.Parray_integral.append(copy.copy(pulsarana))
-                self.Parray_integral[i].setTimeInterval(self.Parray_integral[i].tint)
-                self.Parray_integral[i].phases = np.array(di["pulsar_phase"].to_list())
-                self.Parray_integral[i].info = di
+                self.Parray_integral[-1]._energy_bin_index = i  # (LBZ) Track original energy bin index for visualization after skipped bins
+                self.Parray_integral[-1].setTimeInterval(self.Parray_integral[-1].tint) #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
+                self.Parray_integral[-1].phases = np.array(di["pulsar_phase"].to_list()) #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
+                self.Parray_integral[-1].info = di #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
 
-                self.Parray_integral[i].init_regions()
+                self.Parray_integral[-1].init_regions() #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
 
-                if self.Parray_integral[i].do_fit:
-                    self.Parray_integral[i].setFittingParams(
-                        self.Parray_integral[i].fit_model,
-                        self.Parray_integral[i].binned,
-                        peak=self.Parray_integral[i].peak,
+                if self.Parray_integral[-1].do_fit: #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
+                    self.Parray_integral[-1].setFittingParams( #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
+                        self.Parray_integral[-1].fit_model, #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
+                        self.Parray_integral[-1].binned, #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
+                        peak=self.Parray_integral[-1].peak, #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
                     )
 
                 # Update the information every 1 hour and store final values
                 logger.info("Calculating statistics...")
-                self.Parray_integral[i].execute_stats(self.tobs)
+                try:
+                    self.Parray_integral[-1].execute_stats(self.tobs) #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
+                except (ZeroDivisionError, ValueError, RuntimeError) as e:
+                    logger.warning(
+                        f"Integral energy bin E > {self.energy_edges[i]:.2f} TeV: "
+                        f"Error during statistics calculation ({type(e).__name__}). "
+                        f"This bin will be kept in results but fitting was skipped."
+                    )
+                    # Bin stays in Parray_integral - fitting was skipped for this bin due to sparse data or fitting issues
+
+        # (LBZ) Summary of integral binning
+        if self.do_integral:
+            total_integral_events = sum(len(obj.info) for obj in self.Parray_integral)
+            logger.info(
+                f"Energy integral binning complete: {len(self.Parray_integral)} bins created "
+                f"(out of {len(self.energy_edges)-1} total energy thresholds) "
+                f"with total {total_integral_events} events"
+            )
 
     ##############################################
     # RESULTS
@@ -171,13 +224,15 @@ class PEnergyAnalysis:
             histogram_array = self.Parray
 
         fig_array = []
-        for i in range(0, len(histogram_array)):
+        for idx, obj in enumerate(histogram_array): #(LBZ)
+            # Get original energy bin index to handle skipped bins correctly
+            i = obj._energy_bin_index #(LBZ)
             # Plot histogram from 0 to 1 and from 1 to 2 (2 periods)
             fig = plt.figure(figsize=(12, 5))
-            histogram_array[i].histogram.show_phaseogram(
-                histogram_array[i],
+            histogram_array[idx].histogram.show_phaseogram( #(LBZ)
+                histogram_array[idx], #(LBZ)
                 [0, 2],
-                colorhist="C" + str(i),
+                colorhist="C" + str(idx), #(LBZ)
                 fit=True,
                 time_label=False,
                 stats_label=False,
@@ -209,7 +264,7 @@ class PEnergyAnalysis:
 
             text_towrite = ""
             count = 0
-            for key, value in histogram_array[i].regions.dic.items():
+            for key, value in histogram_array[idx].regions.dic.items(): #(LBZ)
                 if value is not None:
                     if count == 0:
                         text_towrite = (
@@ -226,7 +281,7 @@ class PEnergyAnalysis:
                             + f": Sig(Li&Ma):{value.sign:.2f}$\sigma$"
                         )
             plt.annotate(
-                text_towrite + "\n" + f"Entries={len(histogram_array[i].phases)}",
+                text_towrite + "\n" + f"Entries={len(histogram_array[idx].phases)}", # (LBZ)
                 xy=(1.05, 1.0),
                 xytext=(1.05, 1.0),
                 fontsize=15,
@@ -273,18 +328,20 @@ class PEnergyAnalysis:
             ):
                 print("No fit available for any energy bin")
                 return
-        for i in range(0, len(histogram_array)):
-            if histogram_array[i].fitting.check_fit_result():
-                histogram_array[i].histogram.draw_fitting(
-                    histogram_array[i],
-                    color="C" + str(i),
+        for idx, obj in enumerate(histogram_array):
+            if histogram_array[idx].fitting.check_fit_result():
+                # Get original energy bin index to handle skipped bins correctly (LBZ)
+                i = histogram_array[idx]._energy_bin_index
+                histogram_array[idx].histogram.draw_fitting(
+                    histogram_array[idx],
+                    color="C" + str(idx),
                     density=True,
                     label="Energies(GeV):"
                     + f"{self.energy_edges[i]*1000:.2f}-{self.energy_edges[i+1]*1000:.2f}",
                 )
         plt.xlim(
             2 * histogram_array[0].fitting.shift,
-            1 + 2 * histogram_array[i].fitting.shift,
+            1 + 2 * histogram_array[-1].fitting.shift, #(LBZ)
         )
         plt.legend(fontsize=20)
         return fig
@@ -305,16 +362,18 @@ class PEnergyAnalysis:
     ):
         fig = plt.figure(figsize=(17, 8))
 
-        for i in range(0, len(self.Parray)):
-            self.Parray[i].histogram.draw_density_hist(
+        # (LBZ) Iterate using actual objects to get correct energy_bin_index for skipped bins
+        for idx, obj in enumerate(self.Parray):
+            i = obj._energy_bin_index  # Get original energy bin index
+            obj.histogram.draw_density_hist(
                 [0.7, 1.7],
-                colorhist=colorh[i],
+                colorhist=colorh[idx],
                 label="Energies(GeV):"
                 + f"{self.energy_edges[i]*1000:.0f}-{self.energy_edges[i+1]*1000:.0f}",
                 fill=False,
             )
 
-        self.Parray[i].histogram.draw_background(self.Parray[i], "grey", hline=False)
+        self.Parray[-1].histogram.draw_background(self.Parray[-1], "grey", hline=False) # (LBZ)
 
         signal = ["P1", "P2", "P3"]
         for j in range(0, len(signal)):
@@ -348,20 +407,28 @@ class PEnergyAnalysis:
 
             histogram_array = self.Parray
 
-        peak_stat = [0] * (len(self.energy_edges) - 1)
-        p_stat = [0] * (len(self.energy_edges) - 1)
+        # (LBZ) Defensive check: all bins might be skipped
+        if len(histogram_array) == 0:
+            logger.warning("No energy bins available for show_EnergyPresults (all bins skipped)")
+            return [] #(LBZ)
 
-        for i in range(0, len(self.energy_edges) - 1):
+        # (LBZ) Accumulate results for ALL bins instead of just returning the last one
+        all_results = [] #(LBZ)
+
+        # (LBZ) Iterate over actual histogram_array instead of energy_edges to handle skipped bins
+        for idx, obj in enumerate(histogram_array):
+            i = obj._energy_bin_index  # Get original energy bin index
             print(
                 "Energies(GeV):"
                 + f"{self.energy_edges[i]*1000:.0f}-{self.energy_edges[i+1]*1000:.0f}"
                 + "\n"
             )
-            peak_stat[i], p_stat[i] = histogram_array[i].show_Presults()
+            peak_stat, p_stat = obj.show_Presults() #(LBZ)
+            all_results.append((peak_stat, p_stat))  # (LBZ) Accumulate result
             print("\n \n")
             print("-------------------------------------------------------------------")
 
-        return peak_stat, p_stat
+        return all_results  # (LBZ) Return list of ALL results 
 
     def show_Energy_fitresults(self, integral=None):
         if integral is None:
@@ -382,18 +449,21 @@ class PEnergyAnalysis:
 
             histogram_array = self.Parray
 
-        fit_results = [0] * (len(self.energy_edges) - 1)
+        # (LBZ) Iterate over actual histogram_array instead of energy_edges to handle skipped bins
+        fit_results = []  # (LBZ)
 
-        for i in range(0, len(self.energy_edges) - 1):
+        for obj in histogram_array:
+            i = obj._energy_bin_index  # Get original energy bin index
             print(
                 "Energies(GeV):"
                 + f"{self.energy_edges[i]*1000:.2f}-{self.energy_edges[i+1]*1000:.2f}"
                 + "\n"
             )
-            if histogram_array[i].fitting.check_fit_result():
-                fit_results[i] = histogram_array[i].show_fit_results()
-            else:
+            if obj.fitting.check_fit_result(): # (LBZ)
+                fit_results.append(obj.show_fit_results()) # (LBZ)
+            else: 
                 print("No fit available for this energy range")
+                fit_results.append(None) # (LBZ)
             print("\n \n")
             print("-------------------------------------------------------------------")
 
@@ -418,26 +488,35 @@ class PEnergyAnalysis:
 
             histogram_array = self.Parray
 
+        # (LBZ) Defensive check: all bins might be skipped
+        if len(histogram_array) == 0:
+            logger.warning("No energy bins available for PSigVsEnergy plot (all bins skipped)")
+            return
+
+        # (LBZ) Iterate over actual histogram_array instead of energy_centres to handle skipped bins
         P1_s = []
         P2_s = []
         P1P2_s = []
+        energy_centres_actual = []
 
-        for i in range(0, len(self.energy_centres)):
-            if histogram_array[i].regions.dic["P1"] is not None:
-                P1_s.append(histogram_array[i].regions.P1.sign)
-            if histogram_array[i].regions.dic["P2"] is not None:
-                P2_s.append(histogram_array[i].regions.P2.sign)
-            if histogram_array[i].regions.dic["P1+P2"] is not None:
-                P1P2_s.append(histogram_array[i].regions.P1P2.sign)
+        for obj in histogram_array: # (LBZ)
+            i = obj._energy_bin_index  # Get original energy bin index
+            energy_centres_actual.append(self.energy_centres[i]) # (LBZ)
+            if obj.regions.dic["P1"] is not None: # (LBZ)
+                P1_s.append(obj.regions.P1.sign) # (LBZ)
+            if obj.regions.dic["P2"] is not None: # (LBZ)
+                P2_s.append(obj.regions.P2.sign) # (LBZ)
+            if obj.regions.dic["P1+P2"] is not None: # (LBZ)
+                P1P2_s.append(obj.regions.P1P2.sign) # (LBZ)
 
         if len(P1P2_s) > 0:
-            plt.plot(self.energy_centres, P1P2_s, "o-", color="tab:red", label="P1+P2")
+            plt.plot(energy_centres_actual, P1P2_s, "o-", color="tab:red", label="P1+P2") # (LBZ)
 
         if len(P1_s) > 0:
-            plt.plot(self.energy_centres, P1_s, "o-", color="tab:orange", label="P1")
+            plt.plot(energy_centres_actual, P1_s, "o-", color="tab:orange", label="P1") # (LBZ)
 
         if len(P2_s) > 0:
-            plt.plot(self.energy_centres, P2_s, "o-", color="tab:green", label="P2")
+            plt.plot(energy_centres_actual, P2_s, "o-", color="tab:green", label="P2") # (LBZ)
 
         plt.ylabel("Significance($\sigma$)")
         plt.xticks(
@@ -456,6 +535,7 @@ class PEnergyAnalysis:
 
         P1P2E = []
         P1P2E_error = []
+        energy_centres_actual = [] # (LBZ)
 
         if integral:
             if not self.do_integral:
@@ -472,30 +552,36 @@ class PEnergyAnalysis:
 
             histogram_array = self.Parray
 
-        if histogram_array[0].regions.P1P2_ratio is not None:
-            for i in range(0, len(self.energy_centres)):
-                P1P2E.append(histogram_array[i].regions.P1P2_ratio)
-                P1P2E_error.append(histogram_array[i].regions.P1P2_ratio_error)
+        # (LBZ) Defensive check: all bins might be skipped
+        if len(histogram_array) == 0:
+            logger.warning("No energy bins available for P1P2_ratioVsEnergy (all bins skipped)")
+            return (P1P2E, P1P2E_error, energy_centres_actual)
+
+        # (LBZ) Iterate over actual histogram_array instead of energy_centres to handle skipped bins
+        if len(histogram_array) > 0 and histogram_array[0].regions.P1P2_ratio is not None: # (LBZ)
+            for obj in histogram_array: # (LBZ)
+                i = obj._energy_bin_index  # Get original energy bin index # (LBZ)
+                energy_centres_actual.append(self.energy_centres[i]) # (LBZ)
+                P1P2E.append(obj.regions.P1P2_ratio) # (LBZ)
+                P1P2E_error.append(obj.regions.P1P2_ratio_error) # (LBZ)
         else:
             print("Cannot calculate P1/P2 since one of the peaks is not defined")
 
-        return (P1P2E, P1P2E_error)
+        return (P1P2E, P1P2E_error, energy_centres_actual) # (LBZ)
 
     def P1P2VsEnergy(self, integral=None):
         if integral is None:
             integral = self.integral
 
-        # P1P2E = []
-        # P1P2E_error = []
-
-        ratio, ratio_error = self.P1P2_ratioVsEnergy(integral=integral)
+        ratio, ratio_error, energy_centres_actual = self.P1P2_ratioVsEnergy(integral=integral) # (LBZ)
+        # (LBZ) Use actual energy centres computed from non-skipped bins
         plt.fill_between(
-            self.energy_centres,
+            energy_centres_actual, # (LBZ)
             np.array(ratio) + np.array(ratio_error),
             np.array(ratio) - np.array(ratio_error),
             alpha=0.3,
         )
-        plt.plot(self.energy_centres, ratio, "o-", label="LST-1")
+        plt.plot(energy_centres_actual, ratio, "o-", label="LST-1") # (LBZ)
 
         plt.ylabel("P1/P2")
         plt.xticks(
@@ -534,61 +620,73 @@ class PEnergyAnalysis:
 
             histogram_array = self.Parray
 
+        # (LBZ) Defensive check: all bins might be skipped
+        if len(histogram_array) == 0:
+            logger.warning("No energy bins available for FWHMVsEnergy plot (all bins skipped)")
+            return
+
+        # (LBZ) Build energy_centres_actual once from non-skipped bins
+        energy_centres_actual = [] # (LBZ)
+        for obj in histogram_array: # (LBZ)
+            i = obj._energy_bin_index # (LBZ)
+            energy_centres_actual.append(self.energy_centres[i]) # (LBZ)
+
         if histogram_array[0].fitting.model == "asym_dgaussian":
             prefactor = 2.35482
-            for i in range(0, len(self.energy_centres)):
+            # (LBZ) Iterate over actual objects to handle skipped bins
+            for idx, obj in enumerate(histogram_array): # (LBZ)
                 try:
                     FP1.append(
-                        prefactor * histogram_array[i].fitting.params[1] / 2
-                        + prefactor * histogram_array[i].fitting.params[2] / 2
+                        prefactor * obj.fitting.params[1] / 2 # (LBZ)
+                        + prefactor * obj.fitting.params[2] / 2 # (LBZ)
                     )
-                    energies_F1.append(self.energy_centres[i])
+                    energies_F1.append(energy_centres_actual[idx]) # (LBZ)
                     try:
                         FP1_err.append(
-                            FP1
+                            FP1[-1] # (LBZ)
                             * np.sqrt(
                                 (
-                                    histogram_array[i].errors.params[1]
-                                    / histogram_array[i].fitting.params[1]
+                                    obj.fitting.errors[1] # (LBZ) error before (histogram_array[i].errors.params[1])
+                                    / obj.fitting.params[1] # (LBZ)
                                 )
                                 ** 2
                                 + (
-                                    histogram_array[i].fitting.errors[2]
-                                    / histogram_array[i].fitting.params[2]
+                                    obj.fitting.errors[2] # (LBZ)
+                                    / obj.fitting.params[2] # (LBZ)
                                 )
                                 ** 2
                             )
                         )
-                    except AttributeError:
+                    except (AttributeError, TypeError):
                         FP1_err.append(0)
-                except AttributeError:
+                except (AttributeError, TypeError):
                     pass
 
                 try:
                     FP2.append(
-                        prefactor * histogram_array[i].fitting.params[4] / 2
-                        + prefactor * histogram_array[i].fitting.params[5] / 2
+                        prefactor * obj.fitting.params[4] / 2 # (LBZ)
+                        + prefactor * obj.fitting.params[5] / 2 # (LBZ)
                     )
-                    energies_F2.append(self.energy_centres[i])
+                    energies_F2.append(energy_centres_actual[idx]) # (LBZ)
                     try:
                         FP2_err.append(
-                            FP2
+                            FP2[-1] # (LBZ) 
                             * np.sqrt(
                                 (
-                                    histogram_array[i].errors.params[4]
-                                    / histogram_array[i].fitting.params[4]
+                                    obj.fitting.errors[4] # (LBZ) error before (histogram_array[i].errors.params[1])
+                                    / obj.fitting.params[4] # (LBZ)
                                 )
                                 ** 2
                                 + (
-                                    histogram_array[i].fitting.errors[5]
-                                    / histogram_array[i].fitting.params[5]
+                                    obj.fitting.errors[5] # (LBZ)
+                                    / obj.fitting.params[5] # (LBZ)
                                 )
                                 ** 2
                             )
                         )
-                    except AttributeError:
+                    except (AttributeError, TypeError):
                         FP2_err.append(0)
-                except AttributeError:
+                except (AttributeError, TypeError):
                     pass
 
         else:
@@ -601,25 +699,26 @@ class PEnergyAnalysis:
             else:
                 prefactor = 0
 
-            for i in range(0, len(self.energy_centres)):
+            # (LBZ) Iterate over actual objects to handle skipped bins
+            for idx, obj in enumerate(histogram_array): # (LBZ)
                 try:
-                    FP1.append(prefactor * histogram_array[i].fitting.params[1])
-                    energies_F1.append(self.energy_centres[i])
+                    FP1.append(prefactor * obj.fitting.params[1]) # (LBZ)
+                    energies_F1.append(energy_centres_actual[idx]) # (LBZ)
                     try:
-                        FP1_err.append(prefactor * histogram_array[i].fitting.errors[1])
-                    except AttributeError:
+                        FP1_err.append(prefactor * obj.fitting.errors[1]) # (LBZ)
+                    except (AttributeError, TypeError):
                         FP1_err.append(0)
-                except AttributeError:
+                except (AttributeError, TypeError):
                     pass
 
                 try:
-                    FP2.append(prefactor * histogram_array[i].fitting.params[3])
-                    energies_F2.append(self.energy_centres[i])
+                    FP2.append(prefactor * obj.fitting.params[3]) # (LBZ)
+                    energies_F2.append(energy_centres_actual[idx]) # (LBZ)
                     try:
-                        FP2_err.append(prefactor * histogram_array[i].fitting.errors[3])
-                    except AttributeError:
+                        FP2_err.append(prefactor * obj.fitting.errors[3]) # (LBZ)
+                    except (AttributeError, TypeError):
                         FP2_err.append(0)
-                except AttributeError:
+                except (AttributeError, TypeError):
                     pass
 
         energies_F1 = np.array(energies_F1)
@@ -687,6 +786,11 @@ class PEnergyAnalysis:
 
             histogram_array = self.Parray
 
+        # (LBZ) Defensive check: all bins might be skipped
+        if len(histogram_array) == 0: # (LBZ)
+            logger.warning("No energy bins available for MeanVsEnergy plot (all bins skipped)") # (LBZ)
+            return # (LBZ)
+
         M1 = []
         M2 = []
         M1_err = []
@@ -694,51 +798,59 @@ class PEnergyAnalysis:
         energies_M1 = []
         energies_M2 = []
 
+        # (LBZ) Build energy_centres_actual once from non-skipped bins
+        energy_centres_actual = [] # (LBZ)
+        for obj in histogram_array: # (LBZ)
+            i = obj._energy_bin_index # (LBZ)
+            energy_centres_actual.append(self.energy_centres[i]) # (LBZ)
+
         if histogram_array[0].fitting.model == "asym_dgaussian":
-            for i in range(0, len(self.energy_centres)):
+            # (LBZ) Iterate over actual objects to handle skipped bins
+            for idx, obj in enumerate(histogram_array): # (LBZ)
                 try:
-                    M1.append(histogram_array[i].fitting.params[0])
-                    energies_M1.append(self.energy_centres[i])
+                    M1.append(obj.fitting.params[0]) # (LBZ)
+                    energies_M1.append(energy_centres_actual[idx]) # (LBZ)
                     try:
-                        M1_err.append(histogram_array[i].fitting.errors[0])
-                    except AttributeError:
+                        M1_err.append(obj.fitting.errors[0]) # (LBZ)
+                    except (AttributeError, TypeError):
                         M1_err.append(0)
-                except AttributeError:
+                except (AttributeError, TypeError):
                     pass
 
                 try:
-                    M2.append(histogram_array[i].fitting.params[3])
-                    energies_M2.append(self.energy_centres[i])
+                    M2.append(obj.fitting.params[3]) # (LBZ)
+                    energies_M2.append(energy_centres_actual[idx]) # (LBZ)
                     try:
-                        M1_err.append(histogram_array[i].fitting.errors[3]) # pas M2 err ????????????????????????
-                    except AttributeError:
-                        M1_err.append(0) # pas M2 error ???????? & mieux de mettre autre chose que pas d'erreur (0) ?? 
-                except AttributeError: 
+                        M2_err.append(obj.fitting.errors[3]) # (LBZ) before it was M1 err ???????? 
+                    except (AttributeError, TypeError):
+                        M2_err.append(0)  # (LBZ) before it was M1 err ????????
+                except (AttributeError, TypeError): 
                     pass
 
         elif (
             histogram_array[0].fitting.model == "dgaussian"
             or histogram_array[0].fitting.model == "lorentzian"
         ):
-            for i in range(0, len(self.energy_centres)):
+            # (LBZ) Iterate over actual objects to handle skipped bins
+            for idx, obj in enumerate(histogram_array): # (LBZ) 
                 try:
-                    M1.append(histogram_array[i].fitting.params[0])
-                    energies_M1.append(self.energy_centres[i])
+                    M1.append(obj.fitting.params[0]) # (LBZ) 
+                    energies_M1.append(energy_centres_actual[idx]) # (LBZ) 
                     try:
-                        M1_err.append(histogram_array[i].fitting.errors[0])
-                    except AttributeError:
+                        M1_err.append(obj.fitting.errors[0]) # (LBZ) 
+                    except (AttributeError, TypeError):
                         M1_err.append(0)
-                except AttributeError:
+                except (AttributeError, TypeError):
                     pass
 
                 try:
-                    M2.append(histogram_array[i].fitting.params[2])
-                    energies_M2.append(self.energy_centres[i])
+                    M2.append(obj.fitting.params[2])   # (LBZ)
+                    energies_M2.append(energy_centres_actual[idx])  # (LBZ)
                     try:
-                        M2_err.append(histogram_array[i].fitting.errors[2])
-                    except AttributeError:
+                        M2_err.append(obj.fitting.errors[2])  # (LBZ)
+                    except (AttributeError, TypeError):
                         M2_err.append(0)
-                except AttributeError:
+                except (AttributeError, TypeError):
                     pass
 
         if len(M1) == 0 and len(M2) == 0:
@@ -780,84 +892,84 @@ class PEnergyAnalysis:
 
         return fig
 
+    # def WidthVsEnergy(self, integral=None):  #(LBZ)
+    #     """Plot sigma (width) vs energy for P1 and P2 peaks."""  #(LBZ)
+    #     if integral is None:
+    #         integral = self.integral
 
-    # ################################################################################# (LBZ)
-    # def WidthVsEnergy(self, integral=None):
-    #         if integral is None:
-    #             integral = self.integral
+        # if integral:
+        #     if not self.do_integral:
+        #         raise ValueError(
+        #             "Energy Integral results not produced. Check if do_integral parameter is set to True"
+        #         )
+        #     histogram_array = self.Parray_integral
+        # else:
+        #     if not self.do_diff:
+        #         raise ValueError(
+        #             "Energy Differential results not produced. Check if do_diff parameter is set to True"
+        #         )
+        #     histogram_array = self.Parray
 
-    #         if integral:
-    #             if not self.do_integral:
-    #                 raise ValueError(
-    #                     "Energy Integral results not produced. Check if do_integral parameter is set to True"
-    #                 )
+        # if len(histogram_array) == 0:
+        #     logger.warning("No energy histograms available for WidthVsEnergy plot")
+        #     return
 
-    #             histogram_array = self.Parray_integral
-    #         else:
-    #             if not self.do_diff:
-    #                 raise ValueError(
-    #                     "Energy Differential results not produced. Check if do_diff parameter is set to True"
-    #                 )
+        # W1 = []
+        # W2 = []
+        # W1_err = []
+        # W2_err = []
+        # energies_W1 = []
+        # energies_W2 = []
+        
+        ################################ see later to implement the asym sgaussian ########################
+        # For asym_dgaussian model: params = [mean1, sigma1_left, sigma1_right, mean2, sigma2_left, sigma2_right]  #(LBZ)
+        # if histogram_array[0].fitting.model == "asym_dgaussian":  #(LBZ)
+        #     for i in range(0, len(self.energy_centres)):  #(LBZ)
+        #         try:  #(LBZ)
+        #             W1.append(histogram_array[i].fitting.params[1])  # sigma1_left  #(LBZ)
+        #             energies_W1.append(self.energy_centres[i])  #(LBZ)
+        #             try:  #(LBZ)
+        #                 W1_err.append(histogram_array[i].fitting.errors[1])  #(LBZ)
+        #             except AttributeError:  #(LBZ)
+        #                 W1_err.append(0)  #(LBZ)
+        #         except AttributeError:  #(LBZ)
+        #             pass  #(LBZ)
+        #         try:  #(LBZ)
+        #             W2.append(histogram_array[i].fitting.params[4])  # sigma2_left  #(LBZ)
+        #             energies_W2.append(self.energy_centres[i])  #(LBZ)
+        #             try:  #(LBZ)
+        #                 W2_err.append(histogram_array[i].fitting.errors[4])  #(LBZ)
+        #             except AttributeError:  #(LBZ)
+        #                 W2_err.append(0)  #(LBZ)
+        #         except AttributeError:  #(LBZ)
+        #             pass  #(LBZ)
+        ########################################################################################################""
 
-    #             histogram_array = self.Parray
+        # For dgaussian/lorentzian models: params = [mean1, sigma1, mean2, sigma2]
+        # if (
+        #     histogram_array[0].fitting.model == "dgaussian"
+        #     or histogram_array[0].fitting.model == "lorentzian"
+        # ):
+        #     for i in range(0, len(self.energy_centres)):
+        #         try:
+        #             W1.append(histogram_array[i].fitting.params[1])  # sigma1
+        #             energies_W1.append(self.energy_centres[i])
+        #             try:
+        #                 W1_err.append(histogram_array[i].fitting.errors[1])
+        #             except AttributeError:
+        #                 W1_err.append(0)
+        #         except AttributeError:
+        #             pass
 
-    #         if len(histogram_array) == 0:
-    #             logger.warning("No energy histograms available for WidthVsEnergy plot")
-    #             return
-
-    #         W1 = []
-    #         W2 = []
-    #         W1_err = []
-    #         W2_err = []
-    #         energies_W1 = []
-    #         energies_W2 = []
-
-    #         # if histogram_array[0].fitting.model == "asym_dgaussian":
-    #         #     for i in range(0, len(self.energy_centres)):
-    #         #         try:
-    #         #             W1.append(histogram_array[i].fitting.params[0])
-    #         #             energies_W1.append(self.energy_centres[i])
-    #         #             try:
-    #         #                 W1_err.append(histogram_array[i].fitting.errors[0])
-    #         #             except AttributeError:
-    #         #                 W1_err.append(0)
-    #         #         except AttributeError:
-    #         #             pass
-
-    #         #         try:
-    #         #             M2.append(histogram_array[i].fitting.params[3])
-    #         #             energies_M2.append(self.energy_centres[i])
-    #         #             try:
-    #         #                 M1_err.append(histogram_array[i].fitting.errors[3]) # pas M2 err ????????????????????????
-    #         #             except AttributeError:
-    #         #                 M1_err.append(0) # pas M2 error ????????
-    #         #         except AttributeError:
-    #         #             pass
-
-    #         if (
-    #             histogram_array[0].fitting.model == "dgaussian"
-    #             or histogram_array[0].fitting.model == "lorentzian"
-    #         ):
-    #             for i in range(0, len(self.energy_centres)):
-    #                 try:
-    #                     W1.append(histogram_array[i].fitting.params[1])
-    #                     energies_W1.append(self.energy_centres[i])
-    #                     try:
-    #                         W1_err.append(histogram_array[i].fitting.errors[1])
-    #                     except AttributeError:
-    #                         W1_err.append(0)
-    #                 except AttributeError:
-    #                     pass
-
-    #                 try:
-    #                     W2.append(histogram_array[i].fitting.params[3])
-    #                     energies_W2.append(self.energy_centres[i])
-    #                     try:
-    #                         W2_err.append(histogram_array[i].fitting.errors[3])
-    #                     except AttributeError:
-    #                         W2_err.append(0)
-    #                 except AttributeError:
-    #                     pass
+                # try:
+                #     W2.append(histogram_array[i].fitting.params[3])  # sigma2
+                #     energies_W2.append(self.energy_centres[i])
+                #     try:
+                #         W2_err.append(histogram_array[i].fitting.errors[3])
+                #     except AttributeError:
+                #         W2_err.append(0)
+                # except AttributeError:
+                #     pass
 
     #         if len(W1) == 0 and len(W2) == 0:
     #             print("No fit available for plotting")
@@ -896,7 +1008,7 @@ class PEnergyAnalysis:
     #             plt.grid(which="both")
     #             plt.xscale("log")
 
-    #         return fig
+        # return fig
 
     ########################################################################################################## (LBZ)
     

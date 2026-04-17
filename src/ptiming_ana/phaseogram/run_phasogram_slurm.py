@@ -39,10 +39,14 @@ import warnings
 # Suppress pint's deprecation warning about pkg_resources (appears when path_utils is imported) #(LBZ)
 warnings.filterwarnings("ignore", category=UserWarning, module="pint")
 
+# Attempt absolute import first (when run directly), fall back to relative import (when run as module)
 try:
-    from ptiming_ana.phaseogram.path_utils import build_paths_from_config
-except ModuleNotFoundError:
-    from path_utils import build_paths_from_config
+    from ptiming_ana.phaseogram.path_phasogram_utils import build_phasogram_output_dir
+except (ImportError, ModuleNotFoundError):
+    try:
+        from .path_phasogram_utils import build_phasogram_output_dir
+    except (ImportError, ModuleNotFoundError):
+        raise ImportError("Could not import path_phasogram_utils. Make sure PulsarTimingAnalysis is installed.")
 
 
 def load_config(config_file):
@@ -102,7 +106,7 @@ def build_paths(config,config_file):
         print(f"Input: {paths['input_dir']}")
         print(f"Output: {paths['output_dir']}")
     """
-    built = build_paths_from_config(
+    built = build_phasogram_output_dir(
         config,
         config_file=config_file,
         script_dir=os.path.dirname(os.path.abspath(__file__)),

@@ -14,7 +14,7 @@ from .phasebinning import PhaseBinning
 from .penergy_analysis import PEnergyAnalysis
 from .filter_object import FilterPulsarAna
 from .read_events import ReadDL3File, ReadFermiFile, ReadLSTFile, ReadList
-from .path_utils import build_paths_from_config, output_file_from_dir #(LBZ) 
+from .path_phasogram_utils import build_phasogram_output_dir, output_file_from_dir #(LBZ)
 import pickle
 import yaml
 import logging
@@ -236,7 +236,7 @@ class PulsarAnalysis:
             conf = yaml.safe_load(cfile)
 
 ########################################################################### (LBZ)
-        built_paths = build_paths_from_config(
+        built_paths = build_phasogram_output_dir(
             conf,
             config_file=configuration_file,
             script_dir=os.path.dirname(os.path.abspath(__file__)),
@@ -637,8 +637,9 @@ class PulsarAnalysis:
 
     def show_EnergyPresults(self, integral=None):
         if self.check_energyana():
-            peak_stat, p_stat = self.EnergyAna.show_EnergyPresults(integral)
-            return peak_stat, p_stat
+            # show_EnergyPresults now returns a list of (peak_stat, p_stat) tuples for all bins (LBZ)
+            return self.EnergyAna.show_EnergyPresults(integral)
+        return []  # (LBZ) Return empty list if no energy analysis
 
     def show_EnergyFitresults(self, integral=None):
         if self.check_energyana():
@@ -749,7 +750,8 @@ class PulsarAnalysis:
 
             try:
                 pdf.savefig(self.show_EnergyAna(), bbox_inches="tight", pad_inches=1)
-                #pdf.savefig(self.show_meanVsEnergy(), bbox_inches="tight", pad_inches=1)  #(LBZ) Add Mean vs Energy plot
+                #pdf.savefig(self.show_meanVsEnergy(), bbox_inches="tight", pad_inches=1)  #(LBZ) Add Mean vs Energy plot                
+                #pdf.savefig(self.show_WidthVsEnergy(), bbox_inches="tight", pad_inches=1)  #(LBZ) Add Width vs Energy plot                
                 for i in range(0, len(self.EnergyAna.show_Energy_lightcurve())):
                     pdf.savefig(
                         self.EnergyAna.show_Energy_lightcurve()[i],
@@ -757,12 +759,14 @@ class PulsarAnalysis:
                         pad_inches=1,
                     )
                 if self.do_fit:
-                    for i in range(0, len(self.show_EnergyFitresults())):
-                        df = self.show_EnergyFitresults()[i]
-                        df.to_hdf(
-                            self.output_dir + "/fitting_energy_bin" + str(i) + ".h5",
-                            key="results",
-                        )
+                    fit_results = self.show_EnergyFitresults() #(LBZ)
+                    for idx, df in enumerate(fit_results): #(LBZ)
+                        if df is not None: #(LBZ)
+                            original_bin_idx = self.EnergyAna.Parray[idx]._energy_bin_index #(LBZ)
+                            df.to_hdf(
+                                self.output_dir + f"/fitting_energy_bin{original_bin_idx}.h5", #(LBZ)
+                                key="results",
+                            ) #(LBZ)
             except AttributeError:
                 pass
 

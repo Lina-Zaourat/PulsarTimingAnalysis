@@ -228,6 +228,10 @@ class Lightcurve:
             )
 
     def draw_fitting(self, pulsar_phases, color, density=False, label=None):
+        # Skip fitting if no valid parameters (e.g., fitting failed for sparse data)
+        if pulsar_phases.fitting.params is None or not hasattr(pulsar_phases.fitting, 'params'): #(LBZ)
+            return #(LBZ)
+        
         if pulsar_phases.fitting.shift == 0:
             x = np.linspace(0, 1, 100000)
         else:
