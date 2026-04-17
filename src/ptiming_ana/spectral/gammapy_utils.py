@@ -35,13 +35,16 @@ def read_DL3_files(
     max_rad=0.2,
     zd_cuts=[0, 60],
     energy_dependent_theta=True,
+    date_cuts=None,  # (LBZ) Date range cuts [start_unix, end_unix] from config 
 ):
-    # Read the DL3 files:
+    # Read the DL3 files with synchronized cuts from config
+    # date_cuts: Unix timestamps for date filtering (shared with phasogram analysis)
     reader = ReadDL3File(
         directory=directory,
         target_radec=target_radec,
         max_rad=max_rad,
         zd_cuts=zd_cuts,
+        date_cuts=date_cuts,  # (LBZ) Pass date cuts for consistent filtering
         energy_dependent_theta=energy_dependent_theta,
     )
     obs = reader.read_all_DL3file()
@@ -110,6 +113,9 @@ def execute_makers(
         datasets.append(dataset_on_off)
 
     if save_DL4:
+        # Save DL4 files to the parametrized output directory
+        # OGIP_dir is passed from config_reading.py and follows the structure:
+        # {output_root}/{pulsar}/{gheff}/{theta}/{runs_folder}_postcuts_{cuts}/DL4/
         logger.info("Writing DL4 files in " + str(OGIP_dir))
         ogip_path = Path(OGIP_dir)
         for d in range(0, len(datasets)):

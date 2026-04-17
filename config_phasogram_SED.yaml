@@ -1,0 +1,234 @@
+########
+#Configuration file for pulsar analysis using ptiming_ana
+#######
+
+
+##################### PATHS CONFIGURATION #####################
+###############################################################
+
+# -------------------------------------------------------------------------
+# PATHS USAGE 
+# 1) Set only this "paths" section to configure input/output/log/shell paths.
+# 2) Input root can be set with paths.input_root_dir (absolute) OR
+#    paths.input_rel_dir (relative to workspace_root).
+# 3) Output root can be set with paths.output_root_dir (absolute) OR
+#    paths.output_rel_dir (relative to workspace_root).
+# 4) Final directories are auto-built as:
+#    {input_root}/{pulsar_name}/{gheff_cut}/{theta_cont}/{runs_folder_name}
+#    {output_root}/{pulsar_name}/{gheff_cut}/{theta_cont}/{runs_folder_name}_postcuts_{selection_suffix}/{phasograms|spectra}/
+# 5) Log directory uses paths.log_output_dir.
+# 6) Shell script path uses paths.shell_script_path.
+# 7) Legacy keys (pulsar_file_dir, results.output_*) are fallback only and can stay null.
+# -------------------------------------------------------------------------
+
+paths:
+  # ========== ROOT CONFIGURATION ==========
+  # Workspace root directory (only used if you choose the relative way to declare paths with input_rel_dir & output_rel_dir)
+  # Recommanded if the input data and the output results are in the same workspace
+  workspace_root: '/fefs/aswg/workspace/lina.bretonzaourat/Crab_analysis_DL3_sourceIndep'
+
+  # Input/output roots (choose one strategy):
+
+  # relative strategy: set *_rel_dir (joined to workspace_root)
+  input_rel_dir: 'data/processed/DL3/Phased_pulsars'
+  output_rel_dir: 'results/preliminary'
+
+  # (PRIORITY IF NOT NULL) absolute strategy: set *_root_dir and leave *_rel_dir unchanged/unused
+  input_root_dir: null
+  output_root_dir: null
+  
+  # ========== PULSAR IDENTIFICATION ==========
+  # Target pulsar name
+  pulsar_name: 'Crab'
+  
+  # ========== DATA SELECTION PARAMETERS ==========
+  # gheff cut level (gheffcut_0.9 or gheffcut_0.7) and thetacont level (gheffcut_0.9 or gheffcut_0.7)
+  # ONLY two options for now (standard DL3 used) 
+  gheff_cut: 'gheffcut_0.9'
+  theta_cont: 'thetacont_0.7'
+  
+  # Complete runs folder identifier (folder name where the runs .fits are stored)
+  runs_folder_name: 'Data_quality_Crab_gheff0.9_thetacont0.7_zmin0.0_zmax75.0_firstdate20200114_lastdate20251129_phased'
+
+  # ========== SCRIPT EXECUTION PATHS ==========
+  # Directory where SLURM job logs will be stored
+  log_output_dir: '/fefs/aswg/workspace/lina.bretonzaourat/PulsarTimingAnalysis/slurm_outputs/phasogram_script_outputs'
+  
+  # Path to the phasogram SLURM shell script
+  shell_script_path: '/fefs/aswg/workspace/lina.bretonzaourat/PulsarTimingAnalysis/src/ptiming_ana/phaseogram/phasogram_slurm.sh'
+  
+  # ========== AUTO-GENERATED PATHS (used internally) ==========
+  # These are built from the above parameters and should not be modified:
+  # input_dir:   {input_root}/{pulsar_name}/{gheff_cut}/{theta_cont}/{runs_folder_name}
+  # output_dir:  {output_root}/{pulsar_name}/{gheff_cut}/{theta_cont}/{runs_folder_name}_postcuts{selection_suffix}/{phasograms|spectra}/
+  # where selection_suffix = _zmin{zd_range[0]}_zmax{zd_range[1]}_firstdate{YYYYMMDD}_lastdate{YYYYMMDD} according to the cuts below 
+
+############################################################################## (LBZ)
+
+
+###############################################################
+##################### CPHASE PARAMS ###########################
+###############################################################
+cphase_setting:
+   tel: lst 
+   use_interpolation: True
+
+
+###############################################################
+##################### GENERAL PARAMS ##########################
+###############################################################
+
+# -------- FILE DIRECTORY -----------
+# For DL3 phaseogram workflow, input/output paths are auto-built from the paths section.
+# Keep this key only for legacy/manual workflows (DL2/FITS) if needed.
+pulsar_file_dir: null
+results_output_directory: null
+DL4_directory: null
+
+target:
+  name: Crab
+  ra: 83.633
+  dec: 22.01
+
+
+# -------- REGIONS ---------
+
+phase_regions:
+  Bkg: [0.52,0.87]
+  P1: [0,0.026,0.983,1]
+  P2: [0.377,0.422]
+  P1+P2: [0,0.026,0.377,0.422, 0.983,1]
+  P3: [0.026,0.377]
+  
+  
+
+###############################################################
+##################### PHASEOGRAM TOOLS ########################
+###############################################################
+
+
+flags:
+  src_dependent: False #Set to true if using src-dependent DL2 files
+  DL2_format: False #Set to True if using DL2 files
+  fits_format: False #Set to True if using FERMI data
+
+
+
+cuts:
+  energy_dependent_theta: True #True if apply energy-dep cuts on theta
+  filter_data: True
+  include_DL2_extra_cuts: False #True if apply cuts on DL2 files
+  ###########################
+  # IMPORTANT: The following parameters (zd_range and date_range) are used to
+  # automatically generate a unique output folder name. This ensures that each
+  # different selection creates a separate phasogram without overwriting previous results.
+  # Format of output folder: ..._phasograms_zd{min}-{max}_date{YYYYMMDD}to{YYYYMMDD}/
+  zd_range: [55,75] # Zenith angle range in degrees (min, max)
+  date_range: ['2014-12-14', '2029-02-01'] # Date range in ISO Format (YYYY-MM-DD)
+  ############################ 
+  max_rad: 0.2 # Not used if energy_dependent_theta is True
+
+
+  # Traitement DL2 (already selected for DL3)
+  extra_cuts: #VP, extra cuts to be applied if include_DL2_extra_cuts = True, except energy cuts which applies also to DL3 files
+    energy_dependent: False #True if energy-dep cuts (set the energy binning at the end)
+    energy: 0 #VP Set to 0 if no energy cuts (or [X,Y] if want to apply cuts on the energy range) => Applied to DL3 files as well
+    theta: 0.2
+    alpha:  15
+    intensity: 50
+    gammaness: 0.7
+    energy_binning: [0,0.02,1000]
+
+
+
+#-------- BINNING--------------
+#Binning to be used in the phaseogram
+#
+phase_binning:
+  xmin: 0
+  xmax: 1
+  nbins: 60
+  custom_binning: False
+  binning: [0,0.1,0.2]
+
+#Time interval to update statistics
+time_binning:
+   run_time_analysis: True
+   units: h
+   tint: 2
+
+#Energy binning for the phaseogram energy-dependent study
+energy_binning:
+   run_energy_analysis: True
+   do_diff: True #Set to True if want to calculate statistics for data in each energy bin (i.e 50 GeV < E < 80 GeV)
+   do_integral: True # Set to True if want to calculate statistics for data above each energy edge (i.e E>50 GeV)
+   units: GeV
+   emin: 700
+   emax: 10000
+   nbins: 8
+
+
+
+# --------- PHASEOGRAM MODEL-----------
+# Fitting of the phaseogram given a model
+fitting:
+   run_fitting: True 
+   model: dgaussian   # Choose among gaussian, dgaussian, asym_dgaussian, double_lorentz
+   binned: True
+
+
+results:
+  save_results: True #VP set to False because this could introduce a failure in the analysis (NaN for the stat tests)
+  # Output path is auto-built from paths + cuts (single source of truth).
+  # Legacy fallback keys kept null for backward compatibility only.
+  output_file: null
+  output_directory: null
+
+
+###############################################################
+##################### SPECTRAL TOOLS ##########################
+###############################################################
+
+
+reader:
+  energy_dependent_theta: True
+  max_rad: 0.2
+  # (LBZ) NOTE: zd_range is now read from cuts.zd_range for synchronization between phasogram and spectral analysis
+  #
+  use_DL4: False #Set to True if wants to read the DL4 files (hence no reduction of the data will be done)
+  save_DL4: True #Set to True if wants to save the DL4 files computed during the analysis
+
+energy_geometry: #Geometry on true energy and reco energy for gammapy. True energy should be larger
+  real:
+    emin: 0.003
+    emax: 50
+    units: 'TeV'
+    nbinning: 100
+  reco:
+    emin: 0.01
+    emax: 10
+    units: 'TeV'
+    nbinning: 40
+    
+analysis_extra_settings:
+  stacked: True
+  use_safe_mask: False
+
+#Model and energy interval used for the fitting. Only PL for the moment
+spectral_fitting:
+  emin: 20
+  emax: 10000
+  units: 'GeV'
+  model: 'PowerLaw'
+    
+#Number of spectral points in the SED
+spectral_points:
+  emin: 20
+  emax: 700
+  units: 'GeV'
+  number_points: 7  #If bins_per_decade is not False, this parameter has no effect.
+  bins_per_decade: False #Set to False if only want to set the total number_points
+  min_ts: 1.5
+  
+
+  

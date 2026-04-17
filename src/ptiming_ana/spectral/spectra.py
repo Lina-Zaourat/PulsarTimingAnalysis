@@ -49,7 +49,7 @@ class SpectralPulsarAnalysis:
         self.config_params.set_all()
 
     def prepare_analysis(self):
-        edependent_theta, max_rad, zd_range = (
+        edependent_theta, max_rad, zd_range, date_cuts = ( # (LBZ) add date cuts
             self.config_params.extract_detailed_reading_info()
         )
 
@@ -65,12 +65,14 @@ class SpectralPulsarAnalysis:
             + str(self.source_dec)
             + "deg"
         )
+        # Pass date_cuts to ensure spectral analysis uses same filtering as phasogram
         self.observation_list, self.id_list, reader = read_DL3_files(
             directory=self.config_params.directory,
             target_radec=[self.source_ra, self.source_dec],
             max_rad=max_rad,
             zd_cuts=zd_range,
             energy_dependent_theta=edependent_theta,
+            date_cuts=date_cuts,  # (LBZ) Apply synchronized date filtering
         )
         self.reader = reader
         self.spectral_model, self.model = self.set_reference_model()
@@ -130,6 +132,7 @@ class SpectralPulsarAnalysis:
             )
 
         else:
+            # Pass the parametrized DL4 directory path from config to execute_makers
             datasets = execute_makers(
                 self.observation_list,
                 self.id_list,
@@ -453,7 +456,8 @@ class SpectralPulsarAnalysis:
 
         print("\n" + "Total Correlation matrix:" + "\n")
         fig, ax = plt.subplots(figsize=(6, 6))
-        self.fitting_result.models.covariance.plot_correlation(ax)
+        # Use ax as keyword argument, not positional (Gammapy expects figsize first)
+        self.fitting_result.models.covariance.plot_correlation(ax=ax) # (LBZ) error in SED analysis if only ax and not ax=ax 
 
         fig.savefig(self.config_params.output_dir + "correlation.png")
 
