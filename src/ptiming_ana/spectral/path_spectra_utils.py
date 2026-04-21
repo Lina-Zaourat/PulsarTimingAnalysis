@@ -5,10 +5,7 @@ Path construction utilities for spectral analysis results.
 import os
 import logging
 
-LOG_FORMAT = "%(asctime)2s %(levelname)-6s [%(name)3s] %(message)s"
-logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt="%Y-%m-%d %H:%M:%S")
 logger = logging.getLogger(__name__)
-
 
 def build_spectra_output_dir(config):
     """

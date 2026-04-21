@@ -72,7 +72,7 @@ def build_phasogram_output_dir(config, config_file=None, script_dir=None):
         pulsar,
         gheff,
         theta_cont,
-        f"{runs_folder}_postcuts_{selection_suffix}",
+        f"{runs_folder}_postcuts{selection_suffix}",
         "phasograms",  # Add phasograms subdirectory
     )
 
