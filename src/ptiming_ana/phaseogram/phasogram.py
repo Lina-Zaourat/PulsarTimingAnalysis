@@ -170,7 +170,7 @@ def main(config_path, output_dir=None):
 
     # --- Energy Fit Results ---
     # Display and log fit results per energy bin.
-    fit_results_vs_energy = h.show_Energy_fitresults()
+    fit_results_vs_energy = h.show_EnergyFitresults()
     logger.info("Fit results per energy bin displayed.")
 
 if __name__ == "__main__":
