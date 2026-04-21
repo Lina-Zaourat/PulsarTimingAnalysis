@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import copy
 import logging
+#from .ptime_analysis import PulsarTimeAnalysis  #(LBZ) Import for independent TimeEv per energy bin
 
 __all__ = ["PEnergyAnalysis"]
 
@@ -97,7 +98,7 @@ class PEnergyAnalysis:
                 ]
 
                 # (LBZ) Check if bin has enough events (minimum 10 events for statistics)
-                min_events_threshold = 10 ######################## WARNING has to be improved to pass it in config !!!!!!!!!!!!!!!!!!!!!! ################
+                min_events_threshold = 1 ######################## WARNING has to be improved to pass it in config !!!!!!!!!!!!!!!!!!!!!! ################
                 if len(di) < min_events_threshold:
                     logger.warning(
                         f"Skipping energy bin {self.energy_edges[i]:.2f}-{self.energy_edges[i+1]:.2f} {self.energy_units}: "
@@ -112,6 +113,7 @@ class PEnergyAnalysis:
                 )
                 self.Parray.append(copy.copy(pulsarana)) #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
                 self.Parray[-1]._energy_bin_index = i  # (LBZ) Track original energy bin index for visualization after skipped bins
+                #self.Parray[-1].TimeEv = PulsarTimeAnalysis(tint=self.Parray[-1].tint)  #(LBZ) CRITICAL: Create independent TimeEv for each energy bin (not shared!)
                 self.Parray[-1].setTimeInterval(self.Parray[-1].tint) #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
                 self.Parray[-1].phases = np.array(di["pulsar_phase"].to_list()) #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
                 self.Parray[-1].info = di #(LBZ) energy bin low events modification (-1 instead of i to avoid index out of range)
@@ -1027,3 +1029,66 @@ class PEnergyAnalysis:
 
         plt.tight_layout()
         plt.show()
+
+    #(LBZ) Get temporal results for each energy bin
+    def get_Energy_TimeResults(self, integral=None):
+        """
+        Return temporal analysis plots (PsigVsTime, PexVsTime, StatsVsTime) for each energy bin.
+        Returns a flat list of figure objects (fig1, fig2, fig3, fig4, fig5, fig6, ...).
+        Pattern: same as show_Energy_lightcurve() which also returns fig_array.
+        """
+        if integral is None:
+            integral = self.integral
+
+        if integral:
+            if not self.do_integral:
+                raise ValueError(
+                    "Energy Integral results not produced. Check if do_integral parameter is set to True"
+                )
+            histogram_array = self.Parray_integral
+            analysis_type = "Integral"
+        else:
+            if not self.do_diff:
+                raise ValueError(
+                    "Energy Differential results not produced. Check if do_diff parameter is set to True"
+                )
+            histogram_array = self.Parray
+            analysis_type = "Differential"
+
+        # (LBZ) Defensive check: all bins might be skipped
+        if len(histogram_array) == 0:
+            logger.warning(f"No energy bins available for {analysis_type} time results")
+            return []  #(LBZ) Return empty list (consistent with other show_*Energy methods)
+
+        time_results_list = []  #(LBZ) List to store all figure objects (flat list)
+
+        # (LBZ) Iterate over each energy bin and get temporal plots
+        for idx, obj in enumerate(histogram_array):
+            i = obj._energy_bin_index  # Get original energy bin index
+            
+            # Get energy range for this bin
+            if integral:
+                energy_label = f"E > {self.energy_edges[i]*1000:.0f} GeV"
+            else:
+                energy_label = f"{self.energy_edges[i]*1000:.0f}-{self.energy_edges[i+1]*1000:.0f} GeV"
+            
+            # Only get results if TimeAnalysis object exists and has data
+            if hasattr(obj, 'TimeEv') and obj.TimeEv is not None:
+                try:
+                    fig1, fig2, fig3 = obj.TimeEv.show_results()
+                    
+                    # Add energy range to figure titles
+                    fig1.suptitle(f"Significance vs Time - {analysis_type} ({energy_label})", fontsize=14, y=1.00)  #(LBZ)
+                    fig2.suptitle(f"Excess Events vs Time - {analysis_type} ({energy_label})", fontsize=14, y=1.00)  #(LBZ)
+                    fig3.suptitle(f"Statistical Tests vs Time - {analysis_type} ({energy_label})", fontsize=14, y=1.00)  #(LBZ)
+                    
+                    # Append all 3 figures to the flat list  #(LBZ)
+                    time_results_list.append(fig1)  #(LBZ)
+                    time_results_list.append(fig2)  #(LBZ)
+                    time_results_list.append(fig3)  #(LBZ)
+                except Exception as e:  #(LBZ)
+                    logger.warning(f"Could not get temporal results for energy bin {energy_label}: {e}")  #(LBZ)
+            else:  #(LBZ)
+                logger.debug(f"No temporal analysis data for energy bin {energy_label}")  #(LBZ)
+
+        return time_results_list  #(LBZ) Return flat list of figures

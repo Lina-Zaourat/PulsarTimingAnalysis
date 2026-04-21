@@ -674,6 +674,12 @@ class PulsarAnalysis:
             self.EnergyAna.P1P2VsEnergy(integral)
             return fig
 
+    def show_Energy_TimeResults(self, integral=None):  #(LBZ) Same pattern as show_EnergyAna()
+        """Get temporal analysis plots for each energy bin (returns flat list of figures)"""  #(LBZ)
+        if self.check_energyana():  #(LBZ)
+            return self.EnergyAna.get_Energy_TimeResults(integral)  #(LBZ)
+        return []  #(LBZ)
+
     def show_lcVsEnergy(self, integral=None):
         if self.check_energyana():
             fig_array = self.EnergyAna.show_Energy_lightcurve(integral)
@@ -750,7 +756,7 @@ class PulsarAnalysis:
 
             try:
                 pdf.savefig(self.show_EnergyAna(), bbox_inches="tight", pad_inches=1)
-                #pdf.savefig(self.show_meanVsEnergy(), bbox_inches="tight", pad_inches=1)  #(LBZ) Add Mean vs Energy plot                
+                pdf.savefig(self.show_meanVsEnergy(), bbox_inches="tight", pad_inches=1)  #(LBZ) Add Mean vs Energy plot                
                 #pdf.savefig(self.show_WidthVsEnergy(), bbox_inches="tight", pad_inches=1)  #(LBZ) Add Width vs Energy plot                
                 for i in range(0, len(self.EnergyAna.show_Energy_lightcurve())):
                     pdf.savefig(
@@ -758,6 +764,10 @@ class PulsarAnalysis:
                         bbox_inches="tight",
                         pad_inches=1,
                     )
+                #(LBZ) Save temporal results for each energy bin to PDF (same integral setting as lightcurves)
+                time_figs = self.show_Energy_TimeResults()  #(LBZ) NO integral arg - use default (self.integral)
+                for i in range(0, len(time_figs)):  #(LBZ) Iterate cached results
+                    pdf.savefig(time_figs[i], bbox_inches="tight", pad_inches=1)  #(LBZ)
                 if self.do_fit:
                     fit_results = self.show_EnergyFitresults() #(LBZ)
                     for idx, df in enumerate(fit_results): #(LBZ)
