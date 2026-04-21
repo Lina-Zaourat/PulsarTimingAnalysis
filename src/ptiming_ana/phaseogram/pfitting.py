@@ -129,8 +129,8 @@ class PeakFitting:
 
         if self.model == "dgaussian":
             unbinned_likelihood = cost.UnbinnedNLL(
-                double_gaussian, np.array(shift_phases)
-            )
+                np.array(shift_phases), double_gaussian
+            )  #(LBZ) swapped argument order: (data, model)
             minuit = Minuit(
                 unbinned_likelihood,
                 mu=self.init[0],
@@ -149,8 +149,8 @@ class PeakFitting:
 
         if self.model == "tgaussian":
             unbinned_likelihood = cost.UnbinnedNLL(
-                triple_gaussian, np.array(shift_phases)
-            )
+                np.array(shift_phases), triple_gaussian
+            )  #(LBZ) swapped argument order: (data, model)
             minuit = Minuit(
                 unbinned_likelihood,
                 Bkg=self.init[-1],
@@ -184,8 +184,8 @@ class PeakFitting:
 
         elif self.model == "asym_dgaussian":
             unbinned_likelihood = cost.UnbinnedNLL(
-                assymetric_double_gaussian, np.array(shift_phases)
-            )
+                np.array(shift_phases), assymetric_double_gaussian
+            )  #(LBZ) swapped argument order: (data, model)
             minuit = Minuit(
                 unbinned_likelihood,
                 mu=self.init[0],
@@ -212,8 +212,8 @@ class PeakFitting:
 
         elif self.model == "double_lorentz":
             unbinned_likelihood = cost.UnbinnedNLL(
-                double_lorentz, np.array(shift_phases)
-            )
+                np.array(shift_phases), double_lorentz
+            )  #(LBZ) swapped argument order: (data, model)
             minuit = Minuit(
                 unbinned_likelihood,
                 mu_1=self.init[0],
@@ -227,7 +227,7 @@ class PeakFitting:
             self.parnames = ["mu_1", "gamma_1", "mu_2", "gamma_2", "A", "B", "C"]
 
         elif self.model == "lorentzian":
-            unbinned_likelihood = cost.UnbinnedNLL(lorentzian, np.array(shift_phases))
+            unbinned_likelihood = cost.UnbinnedNLL(np.array(shift_phases), lorentzian)  #(LBZ) swapped argument order: (data, model)
             minuit = Minuit(
                 unbinned_likelihood,
                 mu_1=self.init[0],
@@ -238,7 +238,7 @@ class PeakFitting:
             self.parnames = ["mu_1", "gamma_1", "A", "B"]
 
         elif self.model == "gaussian":
-            unbinned_likelihood = cost.UnbinnedNLL(gaussian, np.array(shift_phases))
+            unbinned_likelihood = cost.UnbinnedNLL(np.array(shift_phases), gaussian)  #(LBZ) swapped argument order: (data, model)
             minuit = Minuit(
                 unbinned_likelihood,
                 mu=self.init[0],
