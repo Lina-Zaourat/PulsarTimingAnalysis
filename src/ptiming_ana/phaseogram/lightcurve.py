@@ -4,6 +4,7 @@ from scipy.stats import chisquare, norm
 from .models import (
     gaussian,
     double_gaussian,
+    double_gaussian_heaviside, # (LBZ)
     triple_gaussian,
     assymetric_double_gaussian,
     double_lorentz,
@@ -261,6 +262,12 @@ class Lightcurve:
 
         elif pulsar_phases.fitting.model == "gaussian":
             y = gaussian(x, *pulsar_phases.fitting.params)
+
+        elif pulsar_phases.fitting.model == "dgaussian_heaviside": #(LBZ)
+            y = double_gaussian_heaviside(x, *pulsar_phases.fitting.params)  # (LBZ)
+
+        else: # (LBZ)
+            return # (LBZ)
 
         if density:
             width = 1 / len(self.lc[0])
