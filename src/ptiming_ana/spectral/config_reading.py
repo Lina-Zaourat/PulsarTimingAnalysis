@@ -32,7 +32,7 @@ class SpectralConfigSetting:
         ################################################################## (LBZ)
         # Check if using new 'paths' section configuration
         if "paths" in configuration_dict and configuration_dict["paths"] is not None:
-            logger.info("Using new paths-based configuration structure")
+            logger.info("Using new paths based configuration structure")
             # Use new path building logic
             self.output_dir = build_spectra_output_dir(configuration_dict)
             
@@ -56,7 +56,7 @@ class SpectralConfigSetting:
                     output_root_dir = os.path.join(workspace, output_rel_dir)
             
             pulsar = paths.get("pulsar_name", "Crab")
-            gheff = paths.get("gheff_cut", "gheffcut_0.9")
+            gheff = paths.get("gheff_cut", "gheffcut_0.7")
             theta_cont = paths.get("theta_cont", "thetacont_0.7")
             runs_folder = paths.get("runs_folder_name", "")
             
@@ -180,6 +180,7 @@ class SpectralConfigSetting:
         
         # Read date range from cuts and convert to Unix timestamps
         date_range = cuts.get("date_range", None)
+        date_range_str = None  # (LBZ) For filename suffix 
         date_cuts = None
         if date_range and isinstance(date_range, (list, tuple)) and len(date_range) == 2:
             from astropy.time import Time
@@ -188,16 +189,21 @@ class SpectralConfigSetting:
                 date_start = Time(date_range[0], scale='utc').unix
                 date_end = Time(date_range[1], scale='utc').unix
                 date_cuts = [date_start, date_end]
-                logger.info(f"Date range cuts applied: {date_range[0]} to {date_range[1]}")
+                # Create string format for filenames: YYYYMMDD_to_YYYYMMDD
+                date_range_str = f"{str(date_range[0]).replace('-', '')}_{str(date_range[1]).replace('-', '')}" #(LBZ)
+                logger.info(f"Date range cuts applied: {date_range[0]} to {date_range[1]}") #(LBZ)
             except Exception as e:
                 logger.warning(f"Could not parse date_range: {e}. Proceeding without date cuts.")
         
         ###################################################################### (LBZ)
         edependent_theta = self.reader_info["energy_dependent_theta"]
+        
+        # Read selected peak from reader config
+        selected_peak = self.reader_info.get("selected_peak", "P1") #(LBZ)
 
         if not edependent_theta:
             max_rad = self.reader_info["max_rad"]
         else:
             max_rad = None
 
-        return (edependent_theta, max_rad, zd_range, date_cuts)
+        return (edependent_theta, max_rad, zd_range, date_cuts, date_range_str, selected_peak) #(LBZ)
