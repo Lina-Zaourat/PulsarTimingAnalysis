@@ -61,7 +61,7 @@ def main(config_path, output_dir=None):
     # If output_dir is set, it must take priority over static YAML results paths.
     if output_dir is not None:
         output_file = output_file_from_dir(output_dir)
-
+        # output_file = output_file_from_dir(output_dir, filename="phasograms.pdf") # (LBZ)
         h.output_file = output_file
         h.output_dir = os.path.dirname(output_file)
         h.get_results = True
