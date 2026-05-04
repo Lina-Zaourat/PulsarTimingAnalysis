@@ -1,8 +1,11 @@
 import numpy as np
 import pandas as pd
 from gammapy.stats import WStatCountsStatistic
+import logging  #(LBZ)
 
 __all__ = ["calculate_CountStats", "PhaseRegions", "PulsarPeak"]
+
+logger = logging.getLogger(__name__) #(LBZ)
 
 
 def calculate_CountStats(on_file, off_file=None, factor=None):
@@ -25,6 +28,7 @@ class PhaseRegions:
         P2_object=None,
         P1P2_object=None,
         P3_object=None,
+        P1P2P3_object=None, #(LBZ)
     ):
         # Define background and null regions for both peaks and
         if OFF_object is None:
@@ -33,14 +37,14 @@ class PhaseRegions:
             self.OFF = OFF_object
 
         # Create the peaks in the previosly defined null regions
-        self.create_dic(P1_object, P2_object, P1P2_object, P3_object)
+        self.create_dic(P1_object, P2_object, P1P2_object, P3_object,P1P2P3_object) #(LBZ)
 
     ##############################################
     # EXECUTION
     #############################################
 
     def create_dic(
-        self, P1_object=None, P2_object=None, P1P2_object=None, P3_object=None
+        self, P1_object=None, P2_object=None, P1P2_object=None, P3_object=None,P1P2P3_object=None, #(LBZ)
     ):
         if P1_object is not None:
             self.P1 = P1_object
@@ -68,6 +72,11 @@ class PhaseRegions:
         else:
             self.P3 = None
 
+        if P1P2P3_object is not None: #(LBZ)
+            self.P1P2P3 = P1P2P3_object #(LBZ)
+        else: #(LBZ)
+            self.P1P2P3 = None #(LBZ)
+
         self.npeaks = npeaks
 
         self.dic = {
@@ -75,6 +84,7 @@ class PhaseRegions:
             "P2": P2_object,
             "P1+P2": P1P2_object,
             "P3": P3_object,
+            "P1+P2+P3": P1P2P3_object, #(LBZ)
         }
 
     def remove_peak(self, name):
@@ -98,6 +108,27 @@ class PhaseRegions:
         else:
             self.P1P2_ratio = None
             self.P1P2_ratio_error = None
+
+    def calculate_P1P3(self): #(LBZ)
+        if self.dic["P1"] is not None and self.dic["P3"] is not None: #(LBZ)
+            self.P1P3_ratio = self.P1.Nex / self.P3.Nex #(LBZ)
+            self.P1P3_ratio_error = self.P1P3_ratio * np.sqrt( #(LBZ)
+                (self.P1.yerr / self.P1.Nex) ** 2 + (self.P3.yerr / self.P3.Nex) ** 2 #(LBZ)
+            ) #(LBZ)
+        else:
+            self.P1P3_ratio = None #(LBZ)
+            self.P1P3_ratio_error = None #(LBZ)
+        
+    def calculate_P2P3(self): #(LBZ)
+        if self.dic["P2"] is not None and self.dic["P3"] is not None: #(LBZ)
+            self.P2P3_ratio = self.P2.Nex / self.P3.Nex #(LBZ)
+            self.P2P3_ratio_error = self.P2P3_ratio * np.sqrt( #(LBZ)
+                (self.P2.yerr / self.P2.Nex) ** 2 + (self.P3.yerr / self.P3.Nex) ** 2 #(LBZ)
+            ) #(LBZ)
+
+        else:
+            self.P2P3_ratio = None #(LBZ)
+            self.P2P3_ratio_error = None  #(LBZ)
 
     ##############################################
     # RESULTS
@@ -144,7 +175,7 @@ class PulsarPeak:
         PulsarPhases object from which we extract the pulsar phases and the OFF region statistics
     peak_limits : list
         list of phase edges used to define the region.
-        To define a non continuos region (for instance, the sum of two independent peaks), a list of four edges can be provided.
+        To define a non continuous region (for instance, the sum of two independent peaks), a list of four edges can be provided.
     peak_type : str, optional
         'Background' or 'Signal' type to calculate especific statistics.
 
@@ -215,21 +246,9 @@ class PulsarPeak:
     # Make statistics if the region is signal type only
     def make_stats(self, regions, tobs):
         if self.type == "signal":
-            # (LBZ) OPTION 1: Original version (currently active)
-            # stats, yerror, noff = calculate_CountStats(
-            #     self.phases,
-            #     off_file=regions.OFF.phases,
-            #     factor=(self.deltaP) / regions.OFF.deltaP,
-            # )
-            # self.sign = stats.sqrt_ts.item()
-            # self.Nex = stats.n_sig
-            # self.yerr = yerror
-            # self.sign_ratio = self.sign / np.sqrt(tobs)
-            # self.s_n_ratio = self.Nex / np.sqrt(noff)
-            # self.noff = noff
 
-            # (LBZ) OPTION 2: Enhanced version with error handling (commented out - to be tested)
-            try:
+            # (LBZ) Enhanced version with error handling
+            try:  # (LBZ)
                 stats, yerror, noff = calculate_CountStats(
                     self.phases,
                     off_file=regions.OFF.phases,
@@ -241,18 +260,16 @@ class PulsarPeak:
                 self.sign_ratio = self.sign / np.sqrt(tobs)
                 self.s_n_ratio = self.Nex / np.sqrt(noff)
                 self.noff = noff
-            except Exception as e:
+            except Exception as e: # (LBZ)
                 # Handle cases where stats cannot be calculated (e.g., too few events, empty regions)
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.warning(f"Could not calculate statistics for {getattr(self, 'name', 'unknown peak')}: {e}. Using default values.")
+                logger.warning(f"Could not calculate statistics for {getattr(self, 'name', 'unknown peak')}: {e}. Putting all the values at zero.")
                 # Set default values to prevent AttributeError
-                self.sign = 0.0
-                self.Nex = 0.0
-                self.yerr = 0.0
-                self.sign_ratio = 0.0
-                self.s_n_ratio = 0.0
-                self.noff = 0.0
+                self.sign = 0.0 # (LBZ)
+                self.Nex = 0.0 # (LBZ)
+                self.yerr = 0.0 # (LBZ)
+                self.sign_ratio = 0.0 # (LBZ)
+                self.s_n_ratio = 0.0 # (LBZ)
+                self.noff = 0.0 # (LBZ) 
 
         else:
             print("Cannot calculate statistics for a background region")
