@@ -40,12 +40,15 @@ class Timer:  # (LBZ) Simple timing utility
     def __init__(self):
         self.stages = {}
         self.start_time = time.time()
+        self.prev_time = 0
     
     def mark(self, stage_name):
         """Record the current time for a stage."""
         elapsed = time.time() - self.start_time
+        stage_duration = elapsed - self.prev_time  # Time for this stage only
         self.stages[stage_name] = elapsed
-        logger.info(f"[TIMING] {stage_name}: {elapsed:.2f}s (total: {elapsed:.2f}s)")
+        logger.info(f"[TIMING] {stage_name}: {stage_duration:.2f}s (cumulative: {elapsed:.2f}s)")
+        self.prev_time = elapsed
     
     def report(self):
         """Print a summary of all stages."""
