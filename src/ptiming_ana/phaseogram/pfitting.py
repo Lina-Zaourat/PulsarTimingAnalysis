@@ -7,6 +7,7 @@ from .models import (
     get_model_list,
     gaussian,
     double_gaussian,
+    double_gaussian_heaviside,#(LBZ)
     triple_gaussian,
     assymetric_double_gaussian,
     double_lorentz,
@@ -51,6 +52,9 @@ class PeakFitting:
         if self.peak_tofit == "both" and self.model == "gaussian":
             raise ValueError("Gaussian model can only fit one peak")
 
+        if self.model == "dgaussian_heaviside" and self.peak_tofit != "both": #(LBZ)
+            raise ValueError("Heaviside model needs all three peaks fitted together") #(LBZ)
+
         if self.peak_tofit == "P1" and self.model == "dgaussian":
             raise ValueError("Dgaussian model needs two peaks")
 
@@ -62,6 +66,59 @@ class PeakFitting:
         self.init = []
         intensity = []
         height = []
+
+        if self.model == "dgaussian_heaviside": #(LBZ)
+            for name in ["P1", "P2"]: #(LBZ)
+                P_info = pulsar_phases.regions.dic[name] #(LBZ)
+                if P_info is None: #(LBZ)
+                    raise ValueError("Heaviside model needs P1 and P2 peaks") #(LBZ)
+
+                intensity.append(P_info.Nex / P_info.noff) #(LBZ)
+                height.append(P_info.Nex) #(LBZ)
+                self.shift = ( #(LBZ)
+                    pulsar_phases.regions.OFF.limits[1] #(LBZ)
+                    + pulsar_phases.regions.OFF.limits[0] #(LBZ)
+                ) / 2 #(LBZ)
+
+                if len(P_info.limits) > 2: #(LBZ)
+                    extension = (P_info.limits[0] + 1 + P_info.limits[3]) / 2 #(LBZ)
+                else: #(LBZ)
+                    extension = (P_info.limits[0] + P_info.limits[1]) / 2 #(LBZ)
+
+                if extension < self.shift: #(LBZ)
+                    extension = extension + 1 #(LBZ)
+
+                self.init.extend([extension, P_info.deltaP / 2]) #(LBZ)
+
+            P3_info = pulsar_phases.regions.dic["P3"] #(LBZ)
+            if P3_info is None:
+                raise ValueError("Heaviside model needs P3 peak") #(LBZ)
+
+            p3_threshold = (P3_info.limits[0] + P3_info.limits[1]) / 2 #(LBZ)
+            if p3_threshold < self.shift: #(LBZ)
+                p3_threshold = p3_threshold + 1 #(LBZ)
+
+            self.init.append(p3_threshold) #(LBZ)
+            height.append(P3_info.Nex) #(LBZ)
+
+            bkg = np.mean( #(LBZ)
+                (
+                    pulsar_phases.histogram.lc[0][ #(LBZ)
+                        (
+                            pulsar_phases.histogram.lc[1][:-1] #(LBZ)
+                            > (pulsar_phases.regions.OFF.limits[0]) #(LBZ)
+                        )
+                        & (
+                            pulsar_phases.histogram.lc[1][1:] #(LBZ)
+                            < pulsar_phases.regions.OFF.limits[1] #(LBZ)
+                        )
+                    ]
+                )
+            )
+
+            self.init.extend(height) #(LBZ)
+            self.init.append(bkg) #(LBZ)
+            return #(LBZ)
 
         # Set different initial values for different models
         if self.model == "tgaussian":
@@ -144,6 +201,53 @@ class PeakFitting:
 
             self.parnames = ["mu", "sigma", "mu_2", "sigma_2", "A", "B", "C"]
             for par in ["mu", "sigma", "mu_2", "sigma_2", "B", "C"]:
+                minuit.fixed[par] = False
+            minuit.fixed["A"] = True
+
+        elif self.model == "dgaussian_heaviside": #(LBZ)
+            def custom_dgaussian_heaviside( #(LBZ)
+                x, mu, sigma, mu_2, sigma_2, mu_3, B, C, D #(LBZ)
+            ):
+                return double_gaussian_heaviside( #(LBZ)
+                    x, #(LBZ)
+                    mu, #(LBZ)
+                    sigma, #(LBZ)
+                    mu_2, #(LBZ)
+                    sigma_2, #(LBZ)
+                    mu_3,  #(LBZ)
+                    self.init[-1], #(LBZ)
+                    B, #(LBZ)
+                    C, #(LBZ)
+                    D, #(LBZ)
+                )
+
+            unbinned_likelihood = cost.UnbinnedNLL( #(LBZ)
+                np.array(shift_phases), custom_dgaussian_heaviside #(LBZ)
+            )  #(LBZ) swapped argument order: (data, model)
+            minuit = Minuit( #(LBZ)
+                unbinned_likelihood, #(LBZ)
+                mu=self.init[0], #(LBZ)
+                sigma=self.init[1], #(LBZ)
+                mu_2=self.init[2], #(LBZ)
+                sigma_2=self.init[3], #(LBZ)
+                mu_3=self.init[4], #(LBZ)
+                B=self.init[5], #(LBZ)
+                C=self.init[6], #(LBZ)
+                D=self.init[7], #(LBZ)
+            )
+
+            self.parnames = [ #(LBZ)
+                "mu", #(LBZ)
+                "sigma", #(LBZ)
+                "mu_2", #(LBZ)
+                "sigma_2", #(LBZ)
+                "mu_3", #(LBZ)
+                "A", #(LBZ)
+                "B", #(LBZ)
+                "C", #(LBZ)
+                "D", #(LBZ)
+            ]
+            for par in ["mu", "sigma", "mu_2", "sigma_2", "mu_3", "B", "C", "D"]: #(LBZ)
                 minuit.fixed[par] = False
             minuit.fixed["A"] = True
 
@@ -328,6 +432,12 @@ class PeakFitting:
             sigma_indices = [1]
             height_indices = [2]
             mu_indices = [0]
+
+        elif self.model == "dgaussian_heaviside": #(LBZ)
+            # [mu, sigma, mu_2, sigma_2, mu_3, height1, height2, height3, bkg]
+            sigma_indices = [1, 3] #(LBZ) 
+            height_indices = [5, 6, 7] #(LBZ)
+            mu_indices = [0, 2, 4] #(LBZ)
         else:
             return True  # Model not recognized, skip validation
         ################################ ATTENTION verify if the parameter selections are physically correct and maybe configurable in config file ? #####################
@@ -336,20 +446,30 @@ class PeakFitting:
             if idx < len(self.init):
                 if self.init[idx] <= 0:
                     logger.warning(
-                        f"Invalid sigma/width parameter at index {idx}: {self.init[idx]} ≤ 0. "
-                        f"Skipping fit for this bin."
+                        f"Sigma/width parameter at index {idx}: {self.init[idx]} ≤ 0. "
+                        f"Continuing with the fit using this initial guess."
                     )
-                    return False
+                    # logger.warning(
+                    #     f"Invalid sigma/width parameter at index {idx}: {self.init[idx]} ≤ 0. "
+                    #     f"Skipping fit for this bin."
+                    # )
+                    # return False
+                    continue
         
         # Check height/amplitude parameters > 0
         for idx in height_indices:
             if idx < len(self.init):
                 if self.init[idx] <= 0:
                     logger.warning(
-                        f"Invalid height/amplitude parameter at index {idx}: {self.init[idx]} ≤ 0. "
-                        f"Skipping fit for this bin."
+                        f"Height/amplitude parameter at index {idx}: {self.init[idx]} ≤ 0. "
+                        f"Continuing with the fit using this initial guess."
                     )
-                    return False
+                    # logger.warning(
+                    #     f"Invalid height/amplitude parameter at index {idx}: {self.init[idx]} ≤ 0. "
+                    #     f"Skipping fit for this bin."
+                    # )
+                    # return False
+                    continue
         
         # Check position parameters are within phase bounds [0, 1 + shift]
         max_phase = 1 + abs(self.shift)  # Account for shifted phases
@@ -357,20 +477,29 @@ class PeakFitting:
             if idx < len(self.init):
                 if not (0 <= self.init[idx] <= max_phase):
                     logger.warning(
-                        f"Invalid position parameter at index {idx}: {self.init[idx]} (outside [0, {max_phase}]). "
-                        f"Skipping fit for this bin."
+                        f"Position parameter at index {idx}: {self.init[idx]} (outside [0, {max_phase}]). "
+                        f"Continuing with the fit using this initial guess."
                     )
-                    return False
+                    # logger.warning(
+                    #     f"Invalid position parameter at index {idx}: {self.init[idx]} (outside [0, {max_phase}]). "
+                    #     f"Skipping fit for this bin."
+                    # )
+                    # return False
+                    continue
         
         # Check background is non-negative (last parameter is usually bkg)
         if len(self.init) > 0:
             bkg_idx = len(self.init) - 1
             if self.init[bkg_idx] < 0:
                 logger.warning(
-                    f"Invalid background parameter at index {bkg_idx}: {self.init[bkg_idx]} < 0. "
-                    f"Skipping fit for this bin."
+                    f"Background parameter at index {bkg_idx}: {self.init[bkg_idx]} < 0. "
+                    f"Continuing with the fit using this initial guess."
                 )
-                return False
+                # logger.warning(
+                #     f"Invalid background parameter at index {bkg_idx}: {self.init[bkg_idx]} < 0. "
+                #     f"Skipping fit for this bin."
+                # )
+                # return False
         
         return True
 
@@ -525,6 +654,33 @@ class PeakFitting:
                     p0=self.init[:-1],
                 )
                 self.parnames = ["mu", "sigma", "A", "B"]
+
+            elif self.model == "dgaussian_heaviside": #(LBZ) 
+
+                def custom_dgaussian_heaviside( #(LBZ) 
+                    x, mu, sigma, mu_2, sigma_2, mu_3, B, C, D #(LBZ)
+                ):
+                    return double_gaussian_heaviside( #(LBZ)
+                        x, #(LBZ)
+                        mu, #(LBZ)
+                        sigma, #(LBZ)
+                        mu_2, #(LBZ)
+                        sigma_2, #(LBZ)
+                        mu_3, #(LBZ)
+                        self.init[-1], #(LBZ)
+                        B, #(LBZ)
+                        C, #(LBZ)
+                        D, #(LBZ)
+                    )
+
+                params, pcov_l = curve_fit( #(LBZ)
+                    custom_dgaussian_heaviside, #(LBZ)
+                    bin_centres, #(LBZ)
+                    bin_height, #(LBZ)
+                    sigma=np.sqrt(bin_height), #(LBZ)
+                    p0=self.init[:-1], #(LBZ)
+                ) #(LBZ)
+                self.parnames = ["mu", "sigma", "mu_2", "sigma_2", "mu_3", "A", "B", "C", "D"] #(LBZ)
         # (LBZ) skip the fit if it is not "correct" 
         except (ZeroDivisionError, ValueError, RuntimeError) as e:
             logger.warning(
