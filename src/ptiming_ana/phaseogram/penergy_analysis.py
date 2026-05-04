@@ -692,7 +692,7 @@ class PEnergyAnalysis:
                     pass
 
         else:
-            if histogram_array[0].fitting.model == "dgaussian":
+            if histogram_array[0].fitting.model in ("dgaussian", "dgaussian_heaviside"): # (LBZ)
                 prefactor = 2.35482
 
             elif histogram_array[0].fitting.model == "lorentzian":
@@ -831,6 +831,7 @@ class PEnergyAnalysis:
 
         elif (
             histogram_array[0].fitting.model == "dgaussian"
+            or histogram_array[0].fitting.model == "dgaussian_heaviside" # (LBZ)
             or histogram_array[0].fitting.model == "lorentzian"
         ):
             # (LBZ) Iterate over actual objects to handle skipped bins
