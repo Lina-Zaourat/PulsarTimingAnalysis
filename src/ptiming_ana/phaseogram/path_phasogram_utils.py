@@ -61,6 +61,10 @@ def build_phasogram_output_dir(config, config_file=None, script_dir=None):
         runs_folder,
     )
 
+    # Get the fitting model name
+    fitting_config = config.get("fitting", {})
+    model_name = fitting_config.get("model", "default_model")
+    
     output_dir = os.path.join(
         output_root_dir,
         pulsar,
@@ -68,28 +72,29 @@ def build_phasogram_output_dir(config, config_file=None, script_dir=None):
         theta_cont,
         f"{runs_folder}_postcuts{selection_suffix}",
         "phasograms",  # Add phasograms subdirectory
+        model_name,    # Add model-specific subdirectory
     )
 
     # Build output PDF filename with all postcuts info
     output_filename_parts = ["phasograms"]
     
-    # Add gheff cut (keep full name with "cut")
+    # Add gheff cut in the filename
     if gheff:
         gheff_value = gheff.replace("_", "")
         output_filename_parts.append(gheff_value)
     
-    # Add theta_cont (keep full name with "cont")
+    # Add theta_cont in the filename
     if theta_cont:
         theta_value = theta_cont.replace("_", "")
         output_filename_parts.append(theta_value)
     
-    # Add date range
+    # Add date range in the filename
     if isinstance(date_range, list) and len(date_range) == 2:
         date_start = str(date_range[0]).replace("-", "")
         date_end = str(date_range[1]).replace("-", "")
         output_filename_parts.append(f"date{date_start}to{date_end}")
     
-    # Add zenith (zd) range at the end with min/max labels
+    # Add zenith (zd) range in the filename
     if isinstance(zd_range, list) and len(zd_range) == 2:
         output_filename_parts.append(f"zdmin{int(zd_range[0])}_zdmax{int(zd_range[1])}")
     
