@@ -5,6 +5,7 @@ __all__ = [
     "get_model_list",
     "gaussian",
     "double_gaussian",
+    "double_gaussian_heaviside", #(LBZ)
     "triple_gaussian",
     "assymetric_gaussian_pdf",
     "assymetric_double_gaussian",
@@ -18,6 +19,7 @@ def get_model_list():
     return [
         "gaussian",
         "dgaussian",
+        "dgaussian_heaviside", #(LBZ)
         "double_lorentz",
         "asym_dgaussian",
         "tgaussian",
@@ -44,6 +46,18 @@ def double_gaussian(x, mu, sigma, mu_2, sigma_2, A, B, C):
         / (2 * np.pi) ** (1 / 2)
         / sigma_2
         * np.exp(-((x - mu_2) ** 2) / 2.0 / sigma_2**2)
+    )
+
+
+def double_gaussian_heaviside(x, mu, sigma, mu_2, sigma_2, mu_3, A, B, C, D): #(LBZ)
+    return ( #(LBZ)
+        A #(LBZ)
+        + B / np.sqrt(2 * np.pi) / sigma * np.exp(-((x - mu) ** 2) / 2.0 / sigma**2) #(LBZ)
+        + C #(LBZ)
+        / np.sqrt(2 * np.pi) #(LBZ)
+        / sigma_2 #(LBZ)
+        * np.exp(-((x - mu_2) ** 2) / 2.0 / sigma_2**2) #(LBZ)
+        + D * np.heaviside(x - mu_3, 0.0) #(LBZ)
     )
 
 
