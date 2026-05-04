@@ -3,6 +3,7 @@
 import os
 import argparse
 import logging
+import time  # (LBZ) For timing profiling
 from ptiming_ana.phaseogram import PulsarAnalysis
 from lstchain.io.io import dl2_params_lstcam_key, dl2_params_src_dep_lstcam_key
 from astropy.io import fits
@@ -27,11 +28,38 @@ except (ImportError, ModuleNotFoundError):
 # during script execution. Useful for debugging and monitoring, especially on SLURM.
 logging.basicConfig(
     level=logging.INFO,  # Minimum level of messages to log (INFO, WARNING, ERROR, etc.)
-    format='%(asctime)s - %(levelname)s - %(message)s',  # Format: timestamp - level - message
+    format='%(asctime)s - %(levelname)s [%(name)s] %(message)s',  # Format: timestamp - level - message
     filename='pulsar_analysis.log'  # Log file name
 )
 
 logger = logging.getLogger(__name__)  # Create a logger instance
+
+
+class Timer:  # (LBZ) Simple timing utility
+    """Track execution time of different pipeline stages."""
+    def __init__(self):
+        self.stages = {}
+        self.start_time = time.time()
+    
+    def mark(self, stage_name):
+        """Record the current time for a stage."""
+        elapsed = time.time() - self.start_time
+        self.stages[stage_name] = elapsed
+        logger.info(f"[TIMING] {stage_name}: {elapsed:.2f}s (total: {elapsed:.2f}s)")
+    
+    def report(self):
+        """Print a summary of all stages."""
+        total = time.time() - self.start_time
+        logger.info("=" * 70)
+        logger.info("EXECUTION TIME BREAKDOWN:")
+        logger.info("=" * 70)
+        prev_time = 0
+        for stage, elapsed in self.stages.items():
+            stage_duration = elapsed - prev_time
+            logger.info(f"  {stage:30s}: {stage_duration:8.2f}s (cumulative: {elapsed:.2f}s)")
+            prev_time = elapsed
+        logger.info(f"  {'TOTAL':30s}: {total:8.2f}s")
+        logger.info("=" * 70)
 
 
 def main(config_path, output_dir=None):
@@ -41,43 +69,44 @@ def main(config_path, output_dir=None):
         config_path (str): Path to the configuration file.
         output_dir (str): Optional output directory for results. If None, plots are not saved.
     """
+    timer = Timer()  # (LBZ) Initialize timing tracker
+    
     # --- Pulsar Analysis ---
     # Initialize the PulsarAnalysis object, set the config, and run the analysis.
     h = PulsarAnalysis()
     h.set_config(config_path)
-
-    # #(LBZ) Track whether output_dir came from CLI or was auto-computed
-    output_dir_from_cli = output_dir is not None
-
-    # If no explicit output_dir is provided, auto-compute it from the YAML paths/cuts.
-    if output_dir is None:
-        with open(config_path, "r", encoding="utf-8") as f:
-            conf = yaml.safe_load(f)
-        output_dir = build_phasogram_output_dir(conf, config_file=config_path, script_dir=os.path.dirname(os.path.abspath(__file__)))["output_dir"]  #(LBZ)
-        logger.info(f"Auto-computed output directory from config: {output_dir}")  #(LBZ)
-
-    # --- Force output path from CLI when provided (SLURM mode) ---
-    # run_phasogram_slurm.py passes the dynamically generated folder with selection suffix.
-    # If output_dir is set, it must take priority over static YAML results paths.
+    timer.mark("01_config_setup")  # (LBZ)
+    
+    # Get built_paths from the PulsarAnalysis object (already computed in set_config)
+    built_paths = h.built_paths  # (LBZ)
+    
+    # If output_dir was provided via CLI, use it as the base; otherwise use the auto-computed one
     if output_dir is not None:
-        output_file = output_file_from_dir(output_dir)
-        # output_file = output_file_from_dir(output_dir, filename="phasograms.pdf") # (LBZ)
-        h.output_file = output_file
-        h.output_dir = os.path.dirname(output_file)
-        h.get_results = True
+        # CLI-provided output_dir takes priority for the directory structure
+        output_file = os.path.join(output_dir, os.path.basename(built_paths["output_file"]))
+        logger.info(f"Using CLI output_dir with auto-generated filename: {output_file}")
+    else:
+        # Auto-computed path (from config)
+        output_dir = built_paths["output_dir"]
+        output_file = built_paths["output_file"]
+        logger.info(f"Auto-computed output directory from config: {output_dir}")
+        logger.info(f"Auto-computed output file with postcuts: {output_file}")
 
-        if not os.path.exists(h.output_dir):
-            logger.info(f"Creating output directory: {h.output_dir}")
-            os.makedirs(h.output_dir, exist_ok=True)
+    # Setup output file for PulsarAnalysis object (output_dir is guaranteed non-None at this point)
+    h.output_file = output_file
+    h.output_dir = os.path.dirname(output_file)
+    h.get_results = True
 
-        # #(LBZ) Differentiate between CLI-provided and auto-computed paths
-        if output_dir_from_cli:
-            logger.info(f"Output directory provided via CLI: {h.output_file}")
-        else:
-            logger.info(f"Using auto-computed output directory: {h.output_file}")  #(LBZ)
+    if not os.path.exists(h.output_dir):
+        logger.info(f"Creating output directory: {h.output_dir}")
+        os.makedirs(h.output_dir, exist_ok=True)
+
+    logger.info(f"Output file: {h.output_file}")
+    timer.mark("02_path_setup")  # (LBZ)
 
     h.run()  # This performs the core analysis
     logger.info("Global analysis completed.")
+    timer.mark("03_core_analysis")  # (LBZ)
 
     # --- Phaseogram Creation ---
     # Generate and save the phaseogram plot.
@@ -94,11 +123,13 @@ def main(config_path, output_dir=None):
     logger.info(f"Significance (P1): {h.regions.P1.sign:.1f}")
     logger.info(f"Nexcess (P2): {h.regions.P2.Nex:.1f}")
     logger.info(f"Significance (P2): {h.regions.P2.sign:.1f}")
+    timer.mark("04_statistics")  # (LBZ)
 
     # --- Fit Results ---
     # Display and log fit results.
     fit_result = h.show_fit_results()
     logger.info("Fit results displayed.")
+    timer.mark("05_fit_results")  # (LBZ)
 
     # --- Fitted Phaseogram ---
     # Generate and save the fitted phaseogram.
@@ -130,6 +161,7 @@ def main(config_path, output_dir=None):
     # plt.savefig(f"{results_path}/binned_energy_integrated_phasogram.pdf", format="pdf", dpi=300, bbox_inches="tight")
     plt.close()
     logger.info("Binned energy integrated phaseogram saved.")
+    timer.mark("06_energy_analysis")  # (LBZ)
 
     # --- Energy Statistics ---
     # Display and log energy bin statistics.
@@ -172,6 +204,8 @@ def main(config_path, output_dir=None):
     # Display and log fit results per energy bin.
     fit_results_vs_energy = h.show_EnergyFitresults()
     logger.info("Fit results per energy bin displayed.")
+    
+    timer.report()  # (LBZ) Print timing summary
 
 if __name__ == "__main__":
     # --- Argument Parsing ---
