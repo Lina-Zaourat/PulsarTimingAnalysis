@@ -241,6 +241,9 @@ class PulsarAnalysis:
             config_file=configuration_file,
             script_dir=os.path.dirname(os.path.abspath(__file__)),
         )
+        
+        # Save built_paths as instance attribute for later use
+        self.built_paths = built_paths  # (LBZ)
 
         # Prefer canonical path-building from the paths section when available.
         # This removes hardcoded per-user absolute paths from the runtime flow.
@@ -407,10 +410,10 @@ class PulsarAnalysis:
         self.get_results = conf["results"]["save_results"]
         if self.get_results:
             ################################################################################## (LBZ)
-            # Single source: output directory derived from paths + cuts.
+            # Single source: output file path derived from paths + cuts in build_phasogram_output_dir.
             # If missing, fallback to legacy keys for backward compatibility.
-            if built_paths.get("output_dir"):
-                self.output_file = output_file_from_dir(built_paths["output_dir"])
+            if built_paths.get("output_file"):
+                self.output_file = built_paths["output_file"]
             elif "output_file" in conf["results"]:
                 self.output_file = conf["results"]["output_file"]
             elif "output_directory" in conf["results"]:
