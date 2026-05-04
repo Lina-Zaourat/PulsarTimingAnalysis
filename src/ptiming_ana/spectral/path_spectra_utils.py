@@ -7,6 +7,24 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+def build_sed_slurm_paths(config, config_file=None, script_dir=None):
+    """Build the SED SLURM shell script path and log directory."""
+    paths = config.get("paths", {})
+
+    log_base = paths.get("log_output_dir", "./out")
+    log_dir = os.path.join(log_base, "sed_script_outputs")
+    os.makedirs(log_dir, exist_ok=True)
+
+    default_shell = os.path.join(script_dir or ".", "run_sed_slurm.sh")
+    shell_script = paths.get("sed_shell_script_path", default_shell)
+
+    return {
+        "log_dir": log_dir,
+        "shell_script": shell_script,
+        "config_file": config_file,
+    }
+
 def build_spectra_output_dir(config):
     """
     Build the spectral analysis output directory path from config.
@@ -71,7 +89,7 @@ def build_spectra_output_dir(config):
 
 def _generate_selection_suffix(config):
     """
-    Generate a stable suffix from cuts settings (zenith/date).
+    Generate a stable suffix from cuts settings (date then zenith for directories).
     
     Parameters
     ----------
@@ -81,23 +99,23 @@ def _generate_selection_suffix(config):
     Returns
     -------
     str
-        Selection suffix like "_zmin55_zmax75_firstdate20191214_lastdate20251229"
+        Selection suffix like "_firstdate20191214_lastdate20251229_zmin55_zmax75"
         or empty string if cuts not specified
     """
     cuts = config.get("cuts", {})
     suffix_parts = []
-    
-    # Add zenith angle range if present
-    zd_range = cuts.get("zd_range")
-    if isinstance(zd_range, (list, tuple)) and len(zd_range) == 2:
-        suffix_parts.append(f"zmin{int(zd_range[0])}_zmax{int(zd_range[1])}")
-    
+
     # Add date range if present
     date_range = cuts.get("date_range")
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         date_start = str(date_range[0]).replace("-", "")
         date_end = str(date_range[1]).replace("-", "")
         suffix_parts.append(f"firstdate{date_start}_lastdate{date_end}")
+    
+    # Add zenith angle range if present
+    zd_range = cuts.get("zd_range")
+    if isinstance(zd_range, (list, tuple)) and len(zd_range) == 2:
+        suffix_parts.append(f"zmin{int(zd_range[0])}_zmax{int(zd_range[1])}")
     
     if suffix_parts:
         return "_" + "_".join(suffix_parts)

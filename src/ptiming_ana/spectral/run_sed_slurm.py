@@ -35,49 +35,22 @@ import subprocess
 import argparse
 import yaml
 import logging
-from pathlib import Path
 
 LOG_FORMAT = "%(asctime)s %(levelname)-6s [%(name)s] %(message)s"
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt="%Y-%m-%d %H:%M:%S")
 # logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT, datefmt="%Y-%m-%d %H:%M:%S")
 logger = logging.getLogger(__name__)
 
+try:
+    from ptiming_ana.spectral.path_spectra_utils import build_sed_slurm_paths
+except ModuleNotFoundError:
+    from path_spectra_utils import build_sed_slurm_paths
+
 
 def load_config(config_file):
     """Load YAML configuration file."""
     with open(config_file, 'r') as f:
         return yaml.safe_load(f)
-
-
-def get_script_dir():
-    """Get the directory where this script is located."""
-    return os.path.dirname(os.path.abspath(__file__))
-
-
-def get_shell_script_path(script_dir):
-    """Get the path to the SLURM shell script."""
-    return os.path.join(script_dir, 'run_sed_slurm.sh')
-
-
-def create_log_dir(config, config_file):
-    """Create and return the log directory for SED analysis.
-    
-    Adds 'sed_script_outputs' subdirectory to the base log directory from config.
-    """
-    paths = config.get('paths', {})
-    log_base = paths.get('log_output_dir')
-    
-    if log_base:
-        log_base = os.path.expanduser(log_base)
-        log_dir = os.path.join(log_base, 'sed_script_outputs')
-        os.makedirs(log_dir, exist_ok=True)
-        return log_dir
-    else:
-        # Fallback: create logs directory in slurm_outputs/sed_script_outputs
-        config_dir = os.path.dirname(os.path.abspath(config_file))
-        log_dir = os.path.join(config_dir, '..', '..', '..', 'slurm_outputs', 'sed_script_outputs')
-        os.makedirs(log_dir, exist_ok=True)
-        return log_dir
 
 
 def submit_slurm_job(shell_script_path, config_file, peak, output_dir, log_dir):
@@ -191,15 +164,15 @@ def main():
         return 1
     
     # Get script paths
-    script_dir = get_script_dir()
-    shell_script = get_shell_script_path(script_dir)
+    built_paths = build_sed_slurm_paths(config, config_file=args.config)
+    shell_script = built_paths["shell_script"]
     
     if not os.path.exists(shell_script):
         logger.error(f"SLURM shell script not found: {shell_script}")
         return 1
     
     # Create log directory
-    log_dir = create_log_dir(config, args.config)
+    log_dir = built_paths["log_dir"]
     logger.info(f"Using log directory: {log_dir}")
     
     # Determine which peaks to process
