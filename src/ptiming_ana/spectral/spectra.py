@@ -18,6 +18,7 @@ from IPython.display import display
 
 from gammapy.modeling import Fit
 from itertools import combinations
+from matplotlib.ticker import LogLocator, LogFormatterSciNotation #(LBZ)
 
 LOG_FORMAT = "%(asctime)2s %(levelname)-6s [%(name)3s] %(message)s"
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt="%Y-%m-%d %H:%M:%S")
@@ -49,9 +50,14 @@ class SpectralPulsarAnalysis:
         self.config_params.set_all()
 
     def prepare_analysis(self):
-        edependent_theta, max_rad, zd_range, date_cuts = ( # (LBZ) add date cuts
+        edependent_theta, max_rad, zd_range, date_cuts, date_range_str, selected_peak = ( # (LBZ) add selected_peak from config
             self.config_params.extract_detailed_reading_info()
         )
+        
+        # Store for use in plot methods
+        self.zd_range = zd_range
+        self.date_range_str = date_range_str
+        self.peak = selected_peak  # (LBZ) Peak from config
 
         self.source_ra = self.config_params.target_info["ra"]
         self.source_dec = self.config_params.target_info["dec"]
@@ -87,6 +93,108 @@ class SpectralPulsarAnalysis:
             reader, true_energy_axis, reco_energy_axis
         )
 
+    def get_plot_suffix(self): #(LBZ)
+        """
+        Generate a filename suffix containing peak, date range, and zenith range.
+        Example: _P1_20141214_20290201_zd0_35
+        """
+        suffix = f"_{self.peak}" if hasattr(self, 'peak') else "" #(LBZ)
+        
+        if hasattr(self, 'date_range_str') and self.date_range_str: #(LBZ)
+            suffix += f"_{self.date_range_str}" #(LBZ)
+        
+        if hasattr(self, 'zd_range') and self.zd_range: #(LBZ)
+            zd_min = int(self.zd_range[0]) #(LBZ)
+            zd_max = int(self.zd_range[1]) #(LBZ)
+            suffix += f"_zd{zd_min}_{zd_max}" #(LBZ)
+        
+        return suffix #(LBZ)
+    
+    def get_model_parameters_text(self): #(LBZ)
+        """
+        Extract and format the best fit model parameters for display in legends.
+        Returns a formatted string with index, amplitude, and reference energy.
+        Example: "PL: Γ=2.34±0.12, A=1.2e-11 [cm⁻²s⁻¹TeV⁻¹], E₀=1 TeV"
+        """
+        try:
+            if not hasattr(self, 'fitting_result') or self.fitting_result is None or len(self.fitting_result.models) == 0:
+                return ""
+            
+            spec_model = self.fitting_result.models[0].spectral_model
+            params_str = f"{spec_model.__class__.__name__}"
+            
+            # Extract common parameters for PowerLaw models
+            if hasattr(spec_model, 'index'):
+                index = spec_model.index.value
+                index_err = spec_model.index.error.value if hasattr(spec_model.index, 'error') else None
+                if index_err:
+                    params_str += f": Γ={index:.2f}±{index_err:.2f}"
+                else:
+                    params_str += f": Γ={index:.2f}"
+            
+            if hasattr(spec_model, 'amplitude'):
+                amp = spec_model.amplitude.value
+                amp_unit = spec_model.amplitude.unit
+                amp_err = spec_model.amplitude.error.value if hasattr(spec_model.amplitude, 'error') else None
+                if amp_err:
+                    params_str += f", A=({amp:.2e}±{amp_err:.2e}) {amp_unit}"
+                else:
+                    params_str += f", A={amp:.2e} {amp_unit}"
+            
+            if hasattr(spec_model, 'reference_energy'):
+                e_ref = spec_model.reference_energy.value
+                e_unit = spec_model.reference_energy.unit
+                params_str += f", E₀={e_ref:.1f} {e_unit}"
+            
+            return params_str
+        except Exception as e:
+            logger.debug(f"Could not extract model parameters: {str(e)[:60]}")
+            return ""
+    
+    def get_analysis_info_text(self): #(LBZ)
+        """
+        Extract analysis information for display in plots.
+        Returns a formatted string with pulsar info, cuts, and peak selection.
+        Example: "Crab (RA=83.63°, DEC=22.01°)\\nPeak: P1\\nZenith: [0, 35]°\\nDate: 2014-12-14 to 2029-02-01"
+        """
+        try:
+            info_lines = []
+            
+            # Pulsar info
+            if hasattr(self, 'config_params'):
+                target_info = self.config_params.target_info
+                pulsar_name = target_info.get('name', 'Unknown')
+                ra = target_info.get('ra', 'N/A')
+                dec = target_info.get('dec', 'N/A')
+                info_lines.append(f"{pulsar_name} (RA={ra}°, DEC={dec}°)")
+            
+            # Peak selection
+            if hasattr(self, 'peak'):
+                info_lines.append(f"Peak: {self.peak}")
+            
+            # Zenith cut
+            if hasattr(self, 'zd_range') and self.zd_range:
+                zd_min = int(self.zd_range[0])
+                zd_max = int(self.zd_range[1])
+                info_lines.append(f"Zenith: [{zd_min}, {zd_max}]°")
+            
+            # Date range
+            if hasattr(self, 'date_range_str') and self.date_range_str:
+                # Convert date string format from YYYYMMDD_YYYYMMDD to readable format
+                date_parts = self.date_range_str.split('_')
+                if len(date_parts) == 2:
+                    start = date_parts[0]
+                    end = date_parts[1]
+                    start_formatted = f"{start[0:4]}-{start[4:6]}-{start[6:8]}"
+                    end_formatted = f"{end[0:4]}-{end[4:6]}-{end[6:8]}"
+                    info_lines.append(f"Date: {start_formatted} to {end_formatted}")
+            
+            return "\n".join(info_lines) if info_lines else ""
+        except Exception as e:
+            logger.debug(f"Could not extract analysis info: {str(e)[:60]}")
+            return ""
+ 
+    
     def prepare_makers(self):
         self.dataset_maker, self.bkg_maker, safe_mask_maker = set_makers(
             self.on_phase_region, tuple(self.config_params.phase_region_dic["Bkg"])
@@ -200,24 +308,29 @@ class SpectralPulsarAnalysis:
             name=self.config_params.target_info["name"],
         )
 
-    def run(self, peak="P1"):
+    def run(self, peak=None): #(LBZ)
         if self.config_params is None:
             raise ValueError("No config parameters have been set yet")
 
         # Initialize
         reader = self.prepare_analysis()
+        
+        # Override peak if explicitly provided via CLI (peak != None means it was explicitly passed)
+        if peak is not None: #(LBZ)
+            self.peak = peak #(LBZ)
+            logger.info(f"Peak overridden from CLI: {self.peak}") #(LBZ)
 
         # Prepare geometry
         self.prepare_geometry(reader)
 
-        if len(self.config_params.phase_region_dic[peak]) > 2:
+        if len(self.config_params.phase_region_dic[self.peak]) > 2: #(LBZ)
             self.on_phase_region = []
-            for i in range(0, len(self.config_params.phase_region_dic[peak]), 2):
+            for i in range(0, len(self.config_params.phase_region_dic[self.peak]), 2): #(LBZ)
                 self.on_phase_region.append(
-                    tuple(self.config_params.phase_region_dic[peak][i : i + 2])
+                    tuple(self.config_params.phase_region_dic[self.peak][i : i + 2]) #(LBZ)
                 )
         else:
-            self.on_phase_region = tuple(self.config_params.phase_region_dic[peak])
+            self.on_phase_region = tuple(self.config_params.phase_region_dic[self.peak]) #(LBZ)
 
         logger.info("The Signal phase region is: " + str(self.on_phase_region))
         # Prepare makers
@@ -231,15 +344,32 @@ class SpectralPulsarAnalysis:
         logger.info("FINISHED. Showing results and final plots")
         self.show_fitting_results()
         self.get_flux_points()
-        self.plot_SED_residuals()
+        
+        # Try to plot SED with residuals #(LBZ) Add try/catch to handle insufficient data
+        try:  #(LBZ)
+            self.plot_SED_residuals()
+        except Exception as e:  #(LBZ)
+            logger.warning(f"Could not plot SED residuals: {str(e)[:80]}. Skipping (Maybe due to not enough data).")  #(LBZ)
+        
         # self.plot_excess_counts()
-        self.plot_fp_likelihood()
-        self.create_contour_lines_params()
-        self.get_covariance_matrix()
+        try:  #(LBZ)
+            self.plot_fp_likelihood()
+        except Exception as e:  #(LBZ)
+            logger.warning(f"Could not plot flux points likelihood: {str(e)[:80]}. Skipping (Maybe due to not enough data).")  #(LBZ)
+        
+        try:  #(LBZ)
+            self.create_contour_lines_params()
+        except Exception as e:  #(LBZ)
+            logger.warning(f"Could not create contour lines: {str(e)[:80]}. Skipping (Maybe due to not enough data).")  #(LBZ)
+        
+        try:  #(LBZ)
+            self.get_covariance_matrix()
+        except Exception as e:  #(LBZ)
+            logger.warning(f"Could not get covariance matrix: {str(e)[:80]}. Skipping (Maybe due to not enough data).")  #(LBZ)
 
         ############# RESULTS ######################
 
-    def plot_SED_residuals(
+    def plot_SED_residuals(  #(LBZ) Wrap entire method for robustness
         self,
         include_reference=True,
         include_best_model=True,
@@ -254,59 +384,91 @@ class SpectralPulsarAnalysis:
         color_ref="red",
         ref_label="Reference model",
     ):
-        fig_sed = plt.figure(figsize=(8, 8))
+        try:  #(LBZ) Wrap entire plot method to handle all errors
+            fig_sed = plt.figure(figsize=(8, 8))
 
-        gs2 = GridSpec(7, 1)
-        gs2.update(hspace=0.1)
+            gs2 = GridSpec(7, 1)
+            gs2.update(hspace=0.1)
 
-        args1 = [gs2[:4, :]]
-        args2 = [gs2[5:, :]]
+            args1 = [gs2[:4, :]]
+            args2 = [gs2[5:, :]]
 
-        fig_gs1 = fig_sed.add_subplot(*args1)
-        fig_gs2 = fig_sed.add_subplot(*args2)
+            fig_gs1 = fig_sed.add_subplot(*args1)
+            fig_gs2 = fig_sed.add_subplot(*args2)
 
-        if include_reference:
-            self.plot_ref_model(
+            if include_reference:
+                self.plot_ref_model(
+                    ax=fig_gs1,
+                    ref_spec_model=self.ref_model,
+                    kwargs_ref=kwargs_ref,
+                    ref_label=ref_label,
+                    color_ref=color_ref,
+                )
+
+            self.plot_SED(
                 ax=fig_gs1,
-                ref_spec_model=self.ref_model,
-                kwargs_ref=kwargs_ref,
-                ref_label=ref_label,
-                color_ref=color_ref,
+                include_best_model=include_best_model,
+                include_statistical=include_statistical,
+                label_fp=label_fp,
+                color_fp=color_fp,
+                color_model=color_model,
+                kwargs_fp=kwargs_SED,
+                kwargs_best=kwargs_best,
+                kwargs_best_error=kwargs_best_error,
             )
+            self.plot_residuals(ax=fig_gs2)
 
-        self.plot_SED(
-            ax=fig_gs1,
-            include_best_model=include_best_model,
-            include_statistical=include_statistical,
-            label_fp=label_fp,
-            color_fp=color_fp,
-            color_model=color_model,
-            kwargs_fp=kwargs_SED,
-            kwargs_best=kwargs_best,
-            kwargs_best_error=kwargs_best_error,
-        )
-        self.plot_residuals(ax=fig_gs2)
-
-        fig_sed.savefig(self.config_params.output_dir + "SED.png")
+            try:  #(LBZ) Wrap savefig to handle rendering errors
+                plot_suffix = self.get_plot_suffix()
+                fig_sed.savefig(self.config_params.output_dir + f"SED{plot_suffix}.png")
+            except Exception as e:  #(LBZ) Handle rendering failures
+                logger.warning(f"Could not save SED figure: {str(e)[:80]}. Skipping save (Maybe due to not enough data).")  #(LBZ)
+            finally:  #(LBZ) Always close the figure
+                plt.close(fig_sed)  #(LBZ)
+        except Exception as e:  #(LBZ) Catch all errors in plot generation
+            logger.warning(f"Error creating SED residuals plot: {str(e)[:80]}. Skipping plot (Maybe due to not enough data).")  #(LBZ)
 
     def plot_residuals(self, ax=None, kwargs=None):
         if ax is None:
             fig_sed = plt.figure(figsize=(8, 5))
             ax = fig_sed.add_subplot()
-
-        self.flux_points_dataset.plot_residuals(ax=ax, method="diff/model")
+        
+        try: #(LBZ)
+            # Try to plot residuals using gammapy method #(LBZ)
+            self.flux_points_dataset.plot_residuals(ax=ax, method="diff/model")
+        except (ValueError, RuntimeError) as e:#(LBZ)
+            # Skip residuals plot if insufficient data or NaN/Inf values #(LBZ)
+            logger.warning(f"Could not plot residuals: {str(e)[:80]}. Skipping residuals plot.") #(LBZ)
 
         ax.legend()
-        ax.grid(which="both")
+        ax.grid(which="both", alpha=0.3) #(LBZ)
         ax.set_title("SED residuals")
-
-        orig_xticks = [0.02, 0.05, 0.08, 0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 1, 5, 10]
-        new_xticks = [20, 50, 80, 100, 200, 300, 400, 500, 700, 1000, 5000, 10000]
-
-        ax.set_xticks(orig_xticks, labels=new_xticks)
-        ax.set_xlabel("E (GeV)")
-
-        ax.set_xlim([self.config_params.e_min_points, self.config_params.e_max_points])
+        ax.set_xlabel("E (GeV)") #(LBZ)        
+        # Add analysis info and model parameters to residuals plot #(LBZ)
+        analysis_text = self.get_analysis_info_text() #(LBZ)
+        model_text = self.get_model_parameters_text() #(LBZ)
+        display_text = f"{analysis_text}\n\n{model_text}" if analysis_text and model_text else (analysis_text or model_text) #(LBZ)
+        if display_text: #(LBZ)
+            ax.text(0.05, 0.05, display_text, transform=ax.transAxes, #(LBZ)
+                   verticalalignment='bottom', fontsize=8, bbox=dict(boxstyle='round', #(LBZ)
+                   facecolor='lightblue', alpha=0.5)) #(LBZ)
+        # Configure log scale with proper decade display #(LBZ) Use LogLocator for clean decade display
+        try:  #(LBZ)
+            
+            ax.set_xscale('log') #(LBZ)
+            ax.set_yscale('log') #(LBZ)
+            
+            # Set proper energy limits from config
+            e_min_val = float(self.config_params.e_min_points.value) #(LBZ)
+            e_max_val = float(self.config_params.e_max_points.value) #(LBZ)
+            ax.set_xlim([e_min_val, e_max_val]) #(LBZ)
+            
+            # Use LogLocator to show major ticks at decades (1, 10, 100, 1000, ...)
+            ax.xaxis.set_major_locator(LogLocator(base=10, numticks=15)) #(LBZ)
+            ax.xaxis.set_minor_locator(LogLocator(base=10, subs=np.arange(2, 10), numticks=15)) #(LBZ)
+            ax.xaxis.set_major_formatter(LogFormatterSciNotation(base=10)) #(LBZ)
+        except (ValueError, RuntimeError) as e:  #(LBZ)
+            logger.warning(f"Could not configure residuals axis ticks/limits: {str(e)[:60]}.")  #(LBZ)
 
     def plot_SED(
         self,
@@ -356,16 +518,36 @@ class SpectralPulsarAnalysis:
                 self.model_best.spectral_model.plot_error(ax=ax, **kwargs_best_error)
 
         ax.legend()
-        ax.grid(which="both")
+        ax.grid(which="both", alpha=0.3) #(LBZ)
         ax.set_title("SED")
+        ax.set_xlabel("E (GeV)") #(LBZ)
 
-        orig_xticks = [0.02, 0.05, 0.08, 0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 1, 5, 10]
-        new_xticks = [20, 50, 80, 100, 200, 300, 400, 500, 700, 1000, 5000, 10000]
+        # Add analysis info and model parameters to SED plot #(LBZ)
+        analysis_text = self.get_analysis_info_text() #(LBZ)
+        model_text = self.get_model_parameters_text() #(LBZ)
+        display_text = f"{analysis_text}\n\n{model_text}" if analysis_text and model_text else (analysis_text or model_text) #(LBZ)
+        if display_text: #(LBZ)
+            ax.text(0.05, 0.05, display_text, transform=ax.transAxes, #(LBZ)
+                   verticalalignment='bottom', fontsize=8, bbox=dict(boxstyle='round', #(LBZ)
+                   facecolor='lightyellow', alpha=0.7)) #(LBZ)
 
-        ax.set_xticks(orig_xticks, labels=new_xticks)
-        ax.set_xlabel("E (GeV)")
-
-        ax.set_xlim([self.config_params.e_min_points, self.config_params.e_max_points])
+        # Configure log scale with proper decade display #(LBZ) Use LogLocator for clean decade display
+        try:  #(LBZ)
+            
+            ax.set_xscale('log') #(LBZ)
+            ax.set_yscale('log') #(LBZ)
+            
+            # Set proper energy limits from config
+            e_min_val = float(self.config_params.e_min_points.value) #(LBZ)
+            e_max_val = float(self.config_params.e_max_points.value) #(LBZ)
+            ax.set_xlim([e_min_val, e_max_val]) #(LBZ)
+            
+            # Use LogLocator to show major ticks at decades (1, 10, 100, 1000, ...)
+            ax.xaxis.set_major_locator(LogLocator(base=10, numticks=15)) #(LBZ)
+            ax.xaxis.set_minor_locator(LogLocator(base=10, subs=np.arange(2, 10), numticks=15)) #(LBZ)
+            ax.xaxis.set_major_formatter(LogFormatterSciNotation(base=10)) #(LBZ)
+        except (ValueError, RuntimeError) as e:  #(LBZ)
+            logger.warning(f"Could not configure SED axis ticks/limits: {str(e)[:60]}.")  #(LBZ)
 
     def get_flux_points(self, sed_type="e2dnde"):
         print("\n" + "Flux points using " + str(sed_type) + " format")
@@ -422,14 +604,34 @@ class SpectralPulsarAnalysis:
         self.flux_points.plot(ax=ax, **kwargs_fp)
         self.flux_points.plot_ts_profiles(ax=ax, sed_type="e2dnde")
 
-        orig_xticks = [0.02, 0.05, 0.08, 0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 1, 5, 10]
-        new_xticks = [20, 50, 80, 100, 200, 300, 400, 500, 700, 1000, 5000, 10000]
+        # Add analysis info and model parameters to likelihood plot #(LBZ)
+        analysis_text = self.get_analysis_info_text() #(LBZ)
+        model_text = self.get_model_parameters_text() #(LBZ)
+        display_text = f"{analysis_text}\n\n{model_text}" if analysis_text and model_text else (analysis_text or model_text) #(LBZ)
+        if display_text: #(LBZ)
+            ax.text(0.05, 0.05, display_text, transform=ax.transAxes, #(LBZ)
+                   verticalalignment='bottom', fontsize=7, bbox=dict(boxstyle='round', #(LBZ)
+                   facecolor='wheat', alpha=0.5)) #(LBZ)
 
-        ax.set_xticks(orig_xticks, labels=new_xticks)
-        ax.set_xlabel("E (GeV)")
-        ax.set_xlim([self.config_params.e_min_points, self.config_params.e_max_points])
+        # Configure log scale with proper decade display #(LBZ) Use LogLocator for clean decade display
+        try: #(LBZ)
+            
+            ax.set_xscale('log') #(LBZ)
+            ax.set_xlabel("E (GeV)") #(LBZ)
+            
+            # Set proper energy limits from config
+            e_min_val = float(self.config_params.e_min_points.value) #(LBZ)
+            e_max_val = float(self.config_params.e_max_points.value) #(LBZ)
+            ax.set_xlim([e_min_val, e_max_val]) #(LBZ)
+            
+            # Use LogLocator to show major ticks at decades
+            ax.xaxis.set_major_locator(LogLocator(base=10, numticks=15)) #(LBZ)
+            ax.xaxis.set_minor_locator(LogLocator(base=10, subs=np.arange(2, 10), numticks=15)) #(LBZ)
+            ax.xaxis.set_major_formatter(LogFormatterSciNotation(base=10)) #(LBZ)
+        except (ValueError, RuntimeError) as e:
+            logger.warning(f"Could not configure likelihood profile axis: {str(e)[:60]}.") #(LBZ)
 
-        fig.savefig(self.config_params.output_dir + "likelihood_profile.png")
+        fig.savefig(self.config_params.output_dir + f"likelihood_profile{self.get_plot_suffix()}.png") #(LBZ)
 
     def fit_statistic_profile_params(self):
         total_stat = self.fitting_result.total_stat
@@ -457,9 +659,16 @@ class SpectralPulsarAnalysis:
         print("\n" + "Total Correlation matrix:" + "\n")
         fig, ax = plt.subplots(figsize=(6, 6))
         # Use ax as keyword argument, not positional (Gammapy expects figsize first)
-        self.fitting_result.models.covariance.plot_correlation(ax=ax) # (LBZ) error in SED analysis if only ax and not ax=ax 
-
-        fig.savefig(self.config_params.output_dir + "correlation.png")
+        self.fitting_result.models.covariance.plot_correlation(ax=ax) # (LBZ) error in SED analysis if only ax and not ax=ax         
+        # Add analysis info and model parameters to correlation plot #(LBZ)
+        analysis_text = self.get_analysis_info_text() #(LBZ)
+        model_text = self.get_model_parameters_text() #(LBZ)
+        display_text = f"{analysis_text}\n\n{model_text}" if analysis_text and model_text else (analysis_text or model_text) #(LBZ)
+        if display_text: #(LBZ)
+            ax.text(0.05, 0.05, display_text, transform=ax.transAxes, #(LBZ)
+                   verticalalignment='bottom', fontsize=7, bbox=dict(boxstyle='round', #(LBZ)
+                   facecolor='lightcyan', alpha=0.7)) #(LBZ)
+        fig.savefig(self.config_params.output_dir + f"correlation{self.get_plot_suffix()}.png") #(LBZ)
 
     def extract_parameters(self):
         name_list = []
@@ -504,7 +713,16 @@ class SpectralPulsarAnalysis:
                 x_values, y_values, stat_surface, levels=levels, colors="white"
             )
             ax.clabel(contours, fmt="%.0f$\,\sigma$", inline=3, fontsize=15)
+            
+            # Add analysis info and model parameters to contour plot #(LBZ)
+            analysis_text = self.get_analysis_info_text() #(LBZ)
+            model_text = self.get_model_parameters_text() #(LBZ)
+            display_text = f"{analysis_text}\n\n{model_text}" if analysis_text and model_text else (analysis_text or model_text) #(LBZ)
+            if display_text: #(LBZ)
+                ax.text(0.05, 0.05, display_text, transform=ax.transAxes, #(LBZ)
+                       verticalalignment='bottom', fontsize=6, bbox=dict(boxstyle='round', #(LBZ)
+                       facecolor='lightgreen', alpha=0.6)) #(LBZ)
 
             fig.savefig(
-                self.config_params.output_dir + f"contour_line_{par_1}_{par_2}.png"
+                self.config_params.output_dir + f"contour_line_{par_1}_{par_2}{self.get_plot_suffix()}.png" #(LBZ)
             )
