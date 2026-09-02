@@ -3,7 +3,7 @@
 import os
 import argparse
 import logging
-import time  # (LBZ) For timing profiling
+import time  # (LBZ)
 from ptiming_ana.phaseogram import PulsarAnalysis
 from lstchain.io.io import dl2_params_lstcam_key, dl2_params_src_dep_lstcam_key
 from astropy.io import fits
@@ -107,108 +107,206 @@ def main(config_path, output_dir=None):
     logger.info(f"Output file: {h.output_file}")
     timer.mark("02_path_setup")  # (LBZ)
 
-    h.run()  # This performs the core analysis
-    logger.info("Global analysis completed.")
-    timer.mark("03_core_analysis")  # (LBZ)
-
-    # --- Phaseogram Creation ---
-    # Generate and save the phaseogram plot.
-    phaseogram = h.draw_phaseogram(phase_limits=[0, 2], colorhist='xkcd:baby blue', stats='long')
-    #plt.savefig(f"{results_path}/phasogram.png", format="png", dpi=300, bbox_inches="tight")
-    #plt.savefig(f"{results_path}/phasogram.pdf", format="pdf", dpi=300, bbox_inches="tight")
-    #plt.close()  # Close the plot to free memory
-    logger.info("Phasogram saved.")
-
-    # --- Statistics ---
-    # Display and log peak and periodicity results.
-    results_peaks, results_periodicity = h.show_Presults()
-    logger.info(f"Nexcess (P1): {h.regions.P1.Nex:.1f}")
-    logger.info(f"Significance (P1): {h.regions.P1.sign:.1f}")
-    logger.info(f"Nexcess (P2): {h.regions.P2.Nex:.1f}")
-    logger.info(f"Significance (P2): {h.regions.P2.sign:.1f}")
-    timer.mark("04_statistics")  # (LBZ)
-
-    # --- Fit Results ---
-    # Display and log fit results.
-    fit_result = h.show_fit_results()
-    logger.info("Fit results displayed.")
-    timer.mark("05_fit_results")  # (LBZ)
-
-    # --- Fitted Phaseogram ---
-    # Generate and save the fitted phaseogram.
-    phaseogram = h.draw_phaseogram(phase_limits=[0, 2], colorhist='xkcd:baby blue', fit=True)
-    # plt.savefig(f"{results_path}/fitted_phasogram.png", format="png", dpi=300, bbox_inches="tight")
-    # plt.savefig(f"{results_path}/fitted_phasogram.pdf", format="pdf", dpi=300, bbox_inches="tight")
-    plt.close()
-    logger.info("Fitted phasogram saved.")
-
-    # --- P1 Significance vs Time ---
-    # Plot and save the P1 significance over time.
-    time_binning = h.TimeEv.t
-    P1_sign = h.TimeEv.P1sTime
-    plt.plot(time_binning, P1_sign, 'o-', color='C1')
-    plt.xlabel('Time of observation (s)')
-    plt.ylabel('Significance (sigma)')
-    plt.title('P1 Significance vs Time')
-    plt.grid()
-    # plt.savefig(f"{results_path}/P1_significance_vs_time.png", format="png", dpi=300, bbox_inches="tight")
-    # plt.savefig(f"{results_path}/P1_significance_vs_time.pdf", format="pdf", dpi=300, bbox_inches="tight")
-    plt.close()
-    logger.info("P1 Significance vs Time plot saved.")
-
-    # --- Binned Energy Integrated Phaseogram ---
-    # Generate and save the binned energy integrated phaseogram.
-    h.show_lcVsEnergy()
-    h.show_lcVsEnergy(integral=True)
-    # plt.savefig(f"{results_path}/binned_energy_integrated_phasogram.png", format="png", dpi=300, bbox_inches="tight")
-    # plt.savefig(f"{results_path}/binned_energy_integrated_phasogram.pdf", format="pdf", dpi=300, bbox_inches="tight")
-    plt.close()
-    logger.info("Binned energy integrated phaseogram saved.")
-    timer.mark("06_energy_analysis")  # (LBZ)
-
-    # --- Energy Statistics ---
-    # Display and log energy bin statistics.
-    energy_results = h.show_EnergyPresults(integral=True)
-    # energy_results is now a list of (peak_stat, p_stat) tuples for each energy bin
-    if energy_results:
-        peak_stats_bin1 = energy_results[0][0]
-        peak_stats_bin2 = energy_results[0][1]
-        logger.info(f"First energy bin peak statistics:\n{peak_stats_bin1}")
-        logger.info(f"Total energy bins processed: {len(energy_results)}")
-    else:
-        logger.warning("No valid energy bin statistics to display")
-    logger.info(f"First energy bin: {h.EnergyAna.energy_edges[0]*1000:.1f} GeV - {h.EnergyAna.energy_edges[1]*1000:.1f} GeV")
-
-    # --- (Sigma, FWMH, P1/P2) vs Energy ---
-    # Generate and save the (Sigma, FWMH, P1/P2) vs Energy plot.
-    energy_plots = h.show_EnergyAna(integral=True)
-    # plt.savefig(f"{results_path}/sig_fwmh_p1/P2_VS_energy.png", format="png", dpi=300, bbox_inches="tight")
-    # plt.savefig(f"{results_path}/sig_fwmh_p1/P2_VS_energy.pdf", format="pdf", dpi=300, bbox_inches="tight")
-    plt.close()
-    logger.info("(Sigma, FWMH, P1/P2) vs Energy plot saved.")
-
-    # --- P1/P2 vs Energy ---
-    # Generate and save the P1/P2 vs Energy plot.
-    p1p2_plot = h.show_P1P2VsEnergy()
-    # plt.savefig(f"{results_path}/p1/P2_VS_energy.png", format="png", dpi=300, bbox_inches="tight")
-    # plt.savefig(f"{results_path}/p1/P2_VS_energy.pdf", format="pdf", dpi=300, bbox_inches="tight")
-    plt.close()
-    logger.info("P1/P2 vs Energy plot saved.")
-
-    # --- Mean Phase vs (Phase, Energy) ---
-    # Generate and save the Mean Phase vs (Phase, Energy) plot.
-    mean_energy_plot = h.show_meanVsEnergy()
-    # plt.savefig(f"{results_path}/meanPhase_VS_phase_energy.png", format="png", dpi=300, bbox_inches="tight")
-    # plt.savefig(f"{results_path}/meanPhase_VS_phase_energy.pdf", format="pdf", dpi=300, bbox_inches="tight")
-    plt.close()
-    logger.info("Mean Phase vs (Phase, Energy) plot saved.")
-
-    # --- Energy Fit Results ---
-    # Display and log fit results per energy bin.
-    fit_results_vs_energy = h.show_EnergyFitresults()
-    logger.info("Fit results per energy bin displayed.")
+    # (LBZ) ============= CACHE MANAGEMENT =============
+    cache_settings = dict(yaml.safe_load(open(config_path, 'rb')).get('cache', {}))
     
-    timer.report()  # (LBZ) Print timing summary
+    # Determine cache file path (in phasograms folder, takes into account all cuts)
+    if cache_settings.get('cache_file') is None:
+        phasograms_dir = os.path.dirname(os.path.dirname(h.output_dir))  # (LBZ)
+        cache_settings['cache_file'] = os.path.join(phasograms_dir, 'pulsar_data_cache.pkl')  # (LBZ)
+    
+    # Log cache configuration
+    logger.info("=" * 70)
+    logger.info("CACHE CONFIGURATION")
+    logger.info("=" * 70)
+    logger.info(f"use_cache: {cache_settings.get('use_cache', False)}")
+    logger.info(f"save_cache: {cache_settings.get('save_cache', True)}")
+    logger.info(f"cache_file: {cache_settings['cache_file']}")
+    cache_exists = os.path.exists(cache_settings['cache_file'])
+    logger.info(f"cache_file_exists: {cache_exists}")
+    logger.info("=" * 70)
+    
+    # Check if we should load from cache
+    use_cache = cache_settings.get('use_cache', False)
+    save_cache = cache_settings.get('save_cache', True)
+    
+    if use_cache and cache_exists:
+        # Case 1: use_cache=True AND cache file exists → Load from cache
+        logger.info("=" * 70)
+        logger.info("LOADING DATA FROM CACHE (skipping read/filter)")
+        logger.info("=" * 70)
+        # Load config setup first
+        if h.load_cache(cache_settings['cache_file']):
+            logger.info("Cache loaded successfully")
+            # Setup regions and binning with cached data
+            h.setup_regions_and_binning()
+            # Continue with stats and fitting using cached data
+            h.execute_stats(h.tobs)
+            
+            # Energy analysis if enabled
+            try:
+                logger.info("Performing energy-dependent analysis...")
+                h.EnergyAna.run(h)
+            except AttributeError:
+                logger.warning(
+                    "No Energy Analysis was performed. Check that you set the right energy params (test:phasogram.py)"
+                )
+            
+            if h.get_results:
+                h.save_results()
+                
+            logger.info("Global analysis completed (from cache).")
+            timer.mark("03_cache_load_analysis")
+        else:
+            logger.warning("Cache load failed. Proceeding with normal read/filter...")
+            h.run()
+            timer.mark("03_core_analysis")
+    elif use_cache and not cache_exists:
+        # Case 2: use_cache=True BUT cache file does NOT exist → Normal analysis
+        logger.info("=" * 70)
+        logger.info("LOADING DATA FROM CACHE BUT CACHE FILE DOES NOT EXIST")
+        logger.info("=" * 70)
+        logger.warning(f"Cache file not found at: {cache_settings['cache_file']}")
+        logger.info("Proceeding with NORMAL ANALYSIS (reading and filtering data)")
+        logger.info("=" * 70)
+        h.run()
+        timer.mark("03_core_analysis")
+        
+        # Save cache if enabled
+        if save_cache:
+            logger.info("=" * 70)
+            logger.info("SAVING DATA TO CACHE FOR NEXT RUNS")
+            logger.info("=" * 70)
+            h.save_cache(cache_settings['cache_file'])
+            logger.info(f"Cache saved to: {cache_settings['cache_file']}")
+            logger.info("For next runs, keep cache.use_cache=True to load from cache")
+            timer.mark("03_cache_save")
+        else:
+            logger.info("CASE 2 CONTINUED: NOT SAVING CACHE")
+            logger.info("o save cache for future runs, set save_cache=True in config")
+    else:
+        # Case 3: use_cache=False → Normal analysis (regardless of cache existence)
+        logger.info("=" * 70)
+        logger.info("NORMAL ANALYSIS")
+        logger.info("=" * 70)
+        logger.info("Proceeding with NORMAL ANALYSIS (reading and filtering data)")
+        logger.info("=" * 70)
+
+        h.run()
+        timer.mark("03_core_analysis")
+        
+        # Save cache if enabled
+        if save_cache:
+            logger.info("=" * 70)
+            logger.info("SAVING DATA TO CACHE FOR NEXT RUNS")
+            logger.info("=" * 70)
+            h.save_cache(cache_settings['cache_file'])
+            logger.info(f"Cache saved to: {cache_settings['cache_file']}")
+            logger.info("For next runs, set cache.use_cache=True to load from cache")
+            timer.mark("03_cache_save")
+        else:
+            logger.info("NOT SAVING CACHE")
+            logger.info("To save cache for future runs, set save_cache=True in config")
+
+        # --- Phaseogram Creation ---
+        # Generate and save the phaseogram plot.
+        phaseogram = h.draw_phaseogram(phase_limits=[0, 2], colorhist='xkcd:baby blue', stats='long')
+        #plt.savefig(f"{results_path}/phasogram.png", format="png", dpi=300, bbox_inches="tight")
+        #plt.savefig(f"{results_path}/phasogram.pdf", format="pdf", dpi=300, bbox_inches="tight")
+        #plt.close()  # Close the plot to free memory
+        logger.info("Phasogram saved.")
+
+        # --- Statistics ---
+        # Display and log peak and periodicity results.
+        results_peaks, results_periodicity = h.show_Presults()
+        #logger.info(f"Nexcess (P1): {h.regions.P1.Nex:.1f}")
+        #logger.info(f"Significance (P1): {h.regions.P1.sign:.1f}")
+        #logger.info(f"Nexcess (P2): {h.regions.P2.Nex:.1f}")
+        #logger.info(f"Significance (P2): {h.regions.P2.sign:.1f}")
+        timer.mark("04_statistics")  # (LBZ)
+
+        # --- Fit Results ---
+        # Display and log fit results.
+        fit_result = h.show_fit_results()
+        logger.info("Fit results displayed.")
+        timer.mark("05_fit_results")  # (LBZ)
+
+        # --- Fitted Phaseogram ---
+        # Generate and save the fitted phaseogram.
+        phaseogram = h.draw_phaseogram(phase_limits=[0, 2], colorhist='xkcd:baby blue', fit=True)
+        # plt.savefig(f"{results_path}/fitted_phasogram.png", format="png", dpi=300, bbox_inches="tight")
+        # plt.savefig(f"{results_path}/fitted_phasogram.pdf", format="pdf", dpi=300, bbox_inches="tight")
+        plt.close()
+        logger.info("Fitted phasogram saved.")
+
+        # --- P1 Significance vs Time ---
+        # Plot and save the P1 significance over time.
+        time_binning = h.TimeEv.t
+        P1_sign = h.TimeEv.P1sTime
+        plt.plot(time_binning, P1_sign, 'o-', color='C1')
+        plt.xlabel('Time of observation (s)')
+        plt.ylabel('Significance (sigma)')
+        plt.title('P1 Significance vs Time')
+        plt.grid()
+        # plt.savefig(f"{results_path}/P1_significance_vs_time.png", format="png", dpi=300, bbox_inches="tight")
+        # plt.savefig(f"{results_path}/P1_significance_vs_time.pdf", format="pdf", dpi=300, bbox_inches="tight")
+        plt.close()
+        logger.info("P1 Significance vs Time plot saved.")
+
+        # --- Binned Energy Integrated Phaseogram ---
+        # Generate and save the binned energy integrated phaseogram.
+        h.show_lcVsEnergy()
+        h.show_lcVsEnergy(integral=None)
+        # plt.savefig(f"{results_path}/binned_energy_integrated_phasogram.png", format="png", dpi=300, bbox_inches="tight")
+        # plt.savefig(f"{results_path}/binned_energy_integrated_phasogram.pdf", format="pdf", dpi=300, bbox_inches="tight")
+        plt.close()
+        logger.info("Binned energy integrated phaseogram saved.")
+        timer.mark("06_energy_analysis")  # (LBZ)
+
+        # --- Energy Statistics ---
+        # Display and log energy bin statistics.
+        energy_results = h.show_EnergyPresults()
+        # energy_results is now a list of (peak_stat, p_stat) tuples for each energy bin
+        if energy_results:
+            peak_stats_bin1 = energy_results[0][0]
+            peak_stats_bin2 = energy_results[0][1]
+            logger.info(f"First energy bin peak statistics:\n{peak_stats_bin1}")
+            logger.info(f"Total energy bins processed: {len(energy_results)}")
+        else:
+            logger.warning("No valid energy bin statistics to display")
+        logger.info(f"First energy bin: {h.EnergyAna.energy_edges[0]*1000:.1f} GeV - {h.EnergyAna.energy_edges[1]*1000:.1f} GeV")
+
+        # --- (Sigma, FWMH, P1/P2) vs Energy ---
+        # Generate and save the (Sigma, FWMH, P1/P2) vs Energy plot.
+        # Functions manage do_integral/do_diff internally, no need to pass parameter
+        energy_plots = h.show_EnergyAna()
+        # plt.savefig(f"{results_path}/sig_fwmh_p1/P2_VS_energy.png", format="png", dpi=300, bbox_inches="tight")
+        # plt.savefig(f"{results_path}/sig_fwmh_p1/P2_VS_energy.pdf", format="pdf", dpi=300, bbox_inches="tight")
+        plt.close()
+        logger.info("(Sigma, FWMH, P1/P2) vs Energy plot saved.")
+
+        # --- P1/P2 vs Energy ---
+        # Generate and save the P1/P2 vs Energy plot.
+        p1p2_plot = h.show_P1P2VsEnergy()
+        # plt.savefig(f"{results_path}/p1/P2_VS_energy.png", format="png", dpi=300, bbox_inches="tight")
+        # plt.savefig(f"{results_path}/p1/P2_VS_energy.pdf", format="pdf", dpi=300, bbox_inches="tight")
+        plt.close()
+        logger.info("P1/P2 vs Energy plot saved.")
+
+        # --- Mean Phase vs (Phase, Energy) ---
+        # Generate and save the Mean Phase vs (Phase, Energy) plot.
+        mean_energy_plot = h.show_meanVsEnergy()
+        # plt.savefig(f"{results_path}/meanPhase_VS_phase_energy.png", format="png", dpi=300, bbox_inches="tight")
+        # plt.savefig(f"{results_path}/meanPhase_VS_phase_energy.pdf", format="pdf", dpi=300, bbox_inches="tight")
+        plt.close()
+        logger.info("Mean Phase vs (Phase, Energy) plot saved.")
+
+        # --- Energy Fit Results ---
+        # Display and log fit results per energy bin.
+        fit_results_vs_energy = h.show_EnergyFitresults()
+        logger.info("Fit results per energy bin displayed.")
+        
+        timer.report()  # (LBZ) Print timing summary
 
 if __name__ == "__main__":
     # --- Argument Parsing ---

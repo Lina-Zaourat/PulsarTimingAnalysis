@@ -4,13 +4,14 @@
 #SBATCH -A aswg
 
 # Duration of the job (short,long)
-#SBATCH -p long
+#SBATCH -p short
+
 
 # Name of the job 
 #SBATCH -J phasogram_run_$2
 
 # Memor allocation
-#SBATCH --mem=20g
+#SBATCH --mem=30g
 
 # Remove locked memory limit
 ulimit -l unlimited

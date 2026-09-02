@@ -12,6 +12,8 @@ __all__ = [
     "lorentzian",
     "double_lorentz",
     "lorentz_pdf",
+    "step_function", #(LBZ)
+    "dgaussian_step", #(LBZ)
 ]
 
 
@@ -24,6 +26,8 @@ def get_model_list():
         "asym_dgaussian",
         "tgaussian",
         "lorentzian",
+        "step", #(LBZ)
+        "dgaussian_step", #(LBZ)
     ]
 
 
@@ -57,7 +61,7 @@ def double_gaussian_heaviside(x, mu, sigma, mu_2, sigma_2, mu_3, A, B, C, D): #(
         / np.sqrt(2 * np.pi) #(LBZ)
         / sigma_2 #(LBZ)
         * np.exp(-((x - mu_2) ** 2) / 2.0 / sigma_2**2) #(LBZ)
-        + D * np.heaviside(x - mu_3, 0.0) #(LBZ)
+        + D * np.heaviside(x - mu_3,1 ) #(LBZ)
     )
 
 
@@ -119,3 +123,62 @@ def lorentzian(x, mu, gamma, A, B):
 def double_lorentz(x, mu_1, gamma_1, mu_2, gamma_2, A, B, C):
     # lorentz_pdf_vec=np.vectorize(lorentz_pdf)
     return A + B * lorentz_pdf(x, mu_1, gamma_1) + C * lorentz_pdf(x, mu_2, gamma_2)
+
+
+def step_function(x, phi1, phi2, A, B): #(LBZ)
+    """
+    Step/Rectangle function for modeling a phase interval (e.g., P3 peak).
+    
+    Mathematical model:
+        f(x; φ₁, φ₂, A, B) = A + B  if φ₁ ≤ x ≤ φ₂
+                            = A      otherwise
+    
+    Equivalent form using Heaviside function:
+        f(x) = A + B·H(x - φ₁)·H(φ₂ - x)
+    
+    Parameters:
+        x (array): phase values
+        phi1 (float): start of the phase interval
+        phi2 (float): end of the phase interval  
+        A (float): background/baseline level
+        B (float): height of the step/rectangle
+    
+    Returns:
+        array: f(x) = A + B in [φ₁, φ₂], A elsewhere
+    """
+    return A + B * np.heaviside(x - phi1, 1.0) * np.heaviside(phi2 - x, 1.0) #(LBZ)
+
+
+def dgaussian_step(x, mu, sigma, mu_2, sigma_2, phi1, phi2, A, B, C, D): #(LBZ)
+    """
+    Double Gaussian + Step function model.
+    Combines P1 and P2 as Gaussians with P3 as a rectangular step.
+    
+    Mathematical model:
+        f(x; μ, σ, μ₂, σ₂, φ₁, φ₂, A, B, C, D) =
+            A + B/√(2π)/σ * exp(-((x-μ)²)/(2σ²))
+              + C/√(2π)/σ₂ * exp(-((x-μ₂)²)/(2σ₂²))
+              + D·H(x - φ₁)·H(φ₂ - x)
+    
+    Parameters:
+        x (array): phase values
+        mu (float): mean of P1 (Gaussian)
+        sigma (float): std dev of P1
+        mu_2 (float): mean of P2 (Gaussian)
+        sigma_2 (float): std dev of P2
+        phi1 (float): start of P3 (step)
+        phi2 (float): end of P3 (step)
+        A (float): baseline/background
+        B (float): amplitude of P1
+        C (float): amplitude of P2
+        D (float): amplitude of P3 (step height)
+    
+    Returns:
+        array: Combined model with 3 peaks
+    """
+    return ( #(LBZ)
+        A #(LBZ)
+        + B / np.sqrt(2 * np.pi) / sigma * np.exp(-((x - mu) ** 2) / 2.0 / sigma**2) #(LBZ) P1
+        + C / np.sqrt(2 * np.pi) / sigma_2 * np.exp(-((x - mu_2) ** 2) / 2.0 / sigma_2**2) #(LBZ) P2
+        + D * np.heaviside(x - phi1, 1.0) * np.heaviside(phi2 - x, 1.0) #(LBZ) P3 (step)
+    )

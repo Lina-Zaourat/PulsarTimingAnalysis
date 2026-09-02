@@ -12,6 +12,8 @@ from .models import (
     assymetric_double_gaussian,
     double_lorentz,
     lorentzian,
+    step_function, #(LBZ)
+    dgaussian_step, #(LBZ)
 )
 from more_itertools import sort_together
 
@@ -36,7 +38,6 @@ class PeakFitting:
 
     def run(self, pulsar_phases):
         # Estimate initial values
-
         self.est_initial_values(pulsar_phases)
         # Do the fitting
         if self.binned:
@@ -54,6 +55,9 @@ class PeakFitting:
 
         if self.model == "dgaussian_heaviside" and self.peak_tofit != "both": #(LBZ)
             raise ValueError("Heaviside model needs all three peaks fitted together") #(LBZ)
+        
+        if self.model == "dgaussian_step" and self.peak_tofit != "both": #(LBZ)
+            raise ValueError("Gaussian_step model needs all three peaks fitted together") #(LBZ)
 
         if self.peak_tofit == "P1" and self.model == "dgaussian":
             raise ValueError("Dgaussian model needs two peaks")
@@ -118,6 +122,62 @@ class PeakFitting:
 
             self.init.extend(height) #(LBZ)
             self.init.append(bkg) #(LBZ)
+            return #(LBZ)
+
+        if self.model == "dgaussian_step": #(LBZ)
+            # P1 and P2 as Gaussians, P3 as step rectangle
+
+            
+            heights = []  # Store heights separately
+            for name in ["P1", "P2"]: #(LBZ)
+                P_info = pulsar_phases.regions.dic[name] #(LBZ)
+                if P_info is None: #(LBZ)
+                    raise ValueError("dgaussian_step model needs P1 and P2 peaks") #(LBZ)
+
+                self.shift = ( #(LBZ)
+                    pulsar_phases.regions.OFF.limits[1] #(LBZ)
+                    + pulsar_phases.regions.OFF.limits[0] #(LBZ)
+                ) / 2 #(LBZ)
+
+                if len(P_info.limits) > 2: #(LBZ)
+                    extension = (P_info.limits[0] + 1 + P_info.limits[3]) / 2 #(LBZ)
+                else: #(LBZ)
+                    extension = (P_info.limits[0] + P_info.limits[1]) / 2 #(LBZ)
+
+                if extension < self.shift: #(LBZ)
+                    extension = extension + 1 #(LBZ)
+
+                self.init.extend([extension, P_info.deltaP / 2]) #(LBZ) mu, sigma
+                heights.append(P_info.Nex) #(LBZ) collect height separately
+            
+            # P3 as step rectangle
+            P3_info = pulsar_phases.regions.dic["P3"] #(LBZ)
+            if P3_info is None: #(LBZ)
+                raise ValueError("dgaussian_step model needs P3 peak") #(LBZ)
+            
+            phi1 = P3_info.limits[0] #(LBZ) left edge of P3
+            phi2 = P3_info.limits[1] #(LBZ) right edge of P3
+            self.init.extend([phi1, phi2]) #(LBZ) append phi1, phi2 after position parameters
+            self.init.extend(heights) #(LBZ) append heights: B, C
+            #self.init.append(P3_info.Nex) #(LBZ) append D (P3 height)
+            self.init.append(P3_info.number)
+            
+            bkg = np.mean( #(LBZ)
+                (
+                    pulsar_phases.histogram.lc[0][ #(LBZ)
+                        (
+                            pulsar_phases.histogram.lc[1][:-1] #(LBZ)
+                            > (pulsar_phases.regions.OFF.limits[0]) #(LBZ)
+                        )
+                        & (
+                            pulsar_phases.histogram.lc[1][1:] #(LBZ)
+                            < pulsar_phases.regions.OFF.limits[1] #(LBZ)
+                        )
+                    ]
+                )
+            )
+            
+            self.init.append(bkg) #(LBZ) append baseline (A) at the end
             return #(LBZ)
 
         # Set different initial values for different models
@@ -352,6 +412,21 @@ class PeakFitting:
             )
             self.parnames = ["mu", "sigma", "A", "B"]
 
+        elif self.model == "dgaussian_step": #(LBZ)
+            def custom_dgaussian_step(x, mu, sigma, mu_2, sigma_2, phi1, phi2, B, C, D): #(LBZ)
+                return dgaussian_step(x, mu, sigma, mu_2, sigma_2, phi1, phi2, self.init[-1], B, C, D) #(LBZ)
+            
+            unbinned_likelihood = cost.UnbinnedNLL(np.array(shift_phases), custom_dgaussian_step) #(LBZ)
+            minuit = Minuit( #(LBZ)
+                unbinned_likelihood, #(LBZ)
+                mu=self.init[0], sigma=self.init[1], mu_2=self.init[2], sigma_2=self.init[3], #(LBZ)
+                phi1=self.init[4], phi2=self.init[5], B=self.init[6], C=self.init[7], D=self.init[8], #(LBZ)
+            ) #(LBZ)
+            self.parnames = ["mu", "sigma", "mu_2", "sigma_2", "phi1", "phi2", "A", "B", "C", "D"] #(LBZ)
+            for par in ["mu", "sigma", "mu_2", "sigma_2", "phi1", "phi2", "B", "C", "D"]: #(LBZ)
+                minuit.fixed[par] = False #(LBZ)
+            minuit.fixed["A"] = True #(LBZ)
+
         minuit.errordef = 0.5
         minuit.migrad()
 
@@ -438,6 +513,13 @@ class PeakFitting:
             sigma_indices = [1, 3] #(LBZ) 
             height_indices = [5, 6, 7] #(LBZ)
             mu_indices = [0, 2, 4] #(LBZ)
+        
+        elif self.model == "dgaussian_step": #(LBZ)
+            # [mu, sigma, mu_2, sigma_2, phi1, phi2, B, C, D, A]
+            sigma_indices = [1, 3] #(LBZ)
+            height_indices = [6, 7, 8] #(LBZ) B, C, D
+            mu_indices = [0, 2, 4, 5] #(LBZ) mu, mu_2, phi1, phi2
+        
         else:
             return True  # Model not recognized, skip validation
         ################################ ATTENTION verify if the parameter selections are physically correct and maybe configurable in config file ? #####################
@@ -655,32 +737,37 @@ class PeakFitting:
                 )
                 self.parnames = ["mu", "sigma", "A", "B"]
 
-            elif self.model == "dgaussian_heaviside": #(LBZ) 
-
-                def custom_dgaussian_heaviside( #(LBZ) 
+            elif self.model == "dgaussian_heaviside": #(LBZ)
+                def custom_dgaussian_heaviside( #(LBZ)
                     x, mu, sigma, mu_2, sigma_2, mu_3, B, C, D #(LBZ)
-                ):
+                ): #(LBZ)
                     return double_gaussian_heaviside( #(LBZ)
-                        x, #(LBZ)
-                        mu, #(LBZ)
-                        sigma, #(LBZ)
-                        mu_2, #(LBZ)
-                        sigma_2, #(LBZ)
-                        mu_3, #(LBZ)
-                        self.init[-1], #(LBZ)
-                        B, #(LBZ)
-                        C, #(LBZ)
-                        D, #(LBZ)
-                    )
+                        x, mu, sigma, mu_2, sigma_2, mu_3, self.init[-1], B, C, D #(LBZ)
+                    ) #(LBZ)
 
                 params, pcov_l = curve_fit( #(LBZ)
                     custom_dgaussian_heaviside, #(LBZ)
-                    bin_centres, #(LBZ)
-                    bin_height, #(LBZ)
+                    bin_centres, bin_height, #(LBZ)
                     sigma=np.sqrt(bin_height), #(LBZ)
                     p0=self.init[:-1], #(LBZ)
                 ) #(LBZ)
                 self.parnames = ["mu", "sigma", "mu_2", "sigma_2", "mu_3", "A", "B", "C", "D"] #(LBZ)
+
+            elif self.model == "dgaussian_step": #(LBZ)
+                def custom_dgaussian_step( #(LBZ)
+                    x, mu, sigma, mu_2, sigma_2, phi1, phi2, B, C, D #(LBZ)
+                ): #(LBZ)
+                    return dgaussian_step( #(LBZ)
+                        x, mu, sigma, mu_2, sigma_2, phi1, phi2, self.init[-1], B, C, D #(LBZ)
+                    ) #(LBZ)
+                
+                params, pcov_l = curve_fit( #(LBZ)
+                    custom_dgaussian_step, #(LBZ)
+                    bin_centres, bin_height, #(LBZ)
+                    sigma=np.sqrt(bin_height), #(LBZ)
+                    p0=self.init[:-1], #(LBZ) exclude A
+                ) #(LBZ)
+                self.parnames = ["mu", "sigma", "mu_2", "sigma_2", "phi1", "phi2", "A", "B", "C", "D"] #(LBZ)
         # (LBZ) skip the fit if it is not "correct" 
         except (ZeroDivisionError, ValueError, RuntimeError) as e:
             logger.warning(

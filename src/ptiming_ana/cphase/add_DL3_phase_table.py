@@ -151,6 +151,7 @@ def main():
 
     args = parser.parse_args()
 
+    #print('add_phase_cmd')
     ephem = args.ephem
     output_dir = args.dir_output
     pickle = args.pickle

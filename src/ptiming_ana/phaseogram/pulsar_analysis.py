@@ -354,7 +354,7 @@ class PulsarAnalysis:
         self.setPeaklimits(
             P1_limits=conf["phase_regions"]["P1"],
             P2_limits=conf["phase_regions"]["P2"],
-            P3_limits=conf["phase_regions"]["P3"],
+            P3_limits=conf["phase_regions"]["P3"], # why not P1+P2 here ??? 
         )
 
         if not conf["phase_binning"]["custom_binning"]:
@@ -399,7 +399,7 @@ class PulsarAnalysis:
                 self.setFittingParams(
                     model=conf["fitting"]["model"],
                     binned=conf["fitting"]["binned"],
-                    peak="P1",
+                    peak="P1", # why not P1+P2 ???? 
                 )
             else:
                 self.setFittingParams(
@@ -424,10 +424,25 @@ class PulsarAnalysis:
                 )
         ################################################################################## (LBZ)
 
+            #self.output_dir = os.path.dirname(self.output_file)
             self.output_dir = os.path.dirname(self.output_file)
             if not os.path.exists(self.output_dir):
                 logger.info("Creating directory: " + self.output_dir)
                 os.makedirs(self.output_dir)
+        
+        # Calculate phasograms directory (parent of model-specific output_dir) (LBZ) #ISSUE ? 
+        self.phasograms_dir = os.path.dirname(os.path.dirname(self.output_dir)) # (LBZ)
+        
+        # Set raw data output options (LBZ)
+        self.save_raw_data = conf["results"].get("save_raw_data", False) #(LBZ)
+        self.raw_data_format = conf["results"].get("raw_data_format", "h5") #(LBZ)
+        if self.save_raw_data: #(LBZ)
+            # Determine raw data filename in phasograms folder (shared across models) #(LBZ)
+            if self.get_results: #(LBZ)
+                extension = ".h5" if self.raw_data_format == "h5" else ".csv" #(LBZ)
+                basename = os.path.basename(os.path.splitext(self.output_file)[0])  # Get base name without .pdf (LBZ)
+                self.raw_data_file = os.path.join(self.phasograms_dir, f"raw_data_{basename}{extension}") #(LBZ)
+                logger.info(f"Raw data will be saved to: {self.raw_data_file}") #(LBZ)
         else:
             self.output_file = None
 
@@ -504,18 +519,50 @@ class PulsarAnalysis:
         # Initialize the regions object
         self.init_regions()
 
+    def setup_regions_and_binning(self):  # (LBZ) # ISSUE ? 
+        """Setup regions and binning without reading data.
+        
+        Used when loading from cache to avoid re-reading/filtering data.
+        Phases must already be loaded into self.phases and region limits set.
+        Recreates all dependent objects like histogram and stats.
+        """
+        if not hasattr(self, 'phases') or len(self.phases) == 0:  # (LBZ)
+            raise ValueError("Phases not loaded. Load cache first or run initialize().")  # (LBZ)
+        
+        # Create self.info if it doesn't exist (it should be created by load_cache) (LBZ)
+        if not hasattr(self, 'info') or self.info is None:  # (LBZ)
+            logger.warning("self.info not found, creating minimal DataFrame for compatibility")  # (LBZ)
+            self.info = pd.DataFrame({'pulsar_phase': self.phases})  # (LBZ)
+        
+        # Verify all region limits are set (should be restored from cache)
+        if not hasattr(self, 'OFF_limits'):
+            logger.warning("OFF_limits not set, cannot initialize regions properly")
+        
+        # Shift phases if necessary
+        self.shift_phases(xmin=self.binning.xmin)
+        
+        # Initialize the regions object
+        self.init_regions()  # (LBZ)
+        
+        # CRITICAL: Fill peaks and calculate their statistics (creates 'sign' attribute) (LBZ)
+        self.update_info()  # (LBZ) 20/05
+
     def execute_stats(self, tobs):
         # Update the information at a certain interval of time and store final values
         self.TimeEv.run(self)
+        print('check_run')
 
         # COmpute P1/P2 ratio
         self.regions.calculate_P1P2()
+        print('check_calculate_P1P2')
 
         # Set the final effective time of observation
         self.tobs = tobs
+        print('tobs_ok')
 
         # Fit the histogram using PeakFitting class. If binned is False, an Unbinned Likelihood method is used for the fitting
         if self.do_fit:
+            print('enter_loop')
             logger.info("Fitting the data to the given model...")
             logger.info("Fit model: " + self.fit_model)
             logger.info("Binned fitting: " + str(self.binned))
@@ -536,6 +583,7 @@ class PulsarAnalysis:
         self.execute_stats(self.r.tobs)
 
         # Execute stats in energy bins
+        print('self.EnergyAna',self.EnergyAna)
         try:
             logger.info("Performing energy-dependent analysis...")
             self.EnergyAna.run(self)
@@ -597,7 +645,7 @@ class PulsarAnalysis:
 
         print("RESULTS FOR THE PEAK STATISTICS:" + "\n")
         print(rpeaks)
-        if self.regions.P1P2_ratio is not None:
+        if self.regions.P1P2_ratio is not None:  #(TEST) Simplified check since P1P2_ratio always exists now
             print(
                 "\n"
                 + f"P1/P2 ratio={self.regions.P1P2_ratio:.2f}"
@@ -698,14 +746,108 @@ class PulsarAnalysis:
             fig = self.EnergyAna.show_joined_Energy_fits(integral)
             return fig
 
+    ####################################################### (LBZ)
+    def save_cache(self, cache_file):  # (LBZ)
+        """Save filtered pulsar data to cache for fast re-fitting.
+        
+        Caches phases, times, energies, and configuration to avoid 
+        re-reading/filtering data during subsequent fits.
+        
+        Parameters:
+            cache_file (str): Path to cache file
+        """
+        try:
+            cache_data = {
+                'phases': self.phases,
+                'times': self.times,
+                'energies': getattr(self, 'energies', None),  # May not exist
+                'tobs': self.tobs,
+                'telescope': self.telescope,
+                'energy_units': self.energy_units,
+                'nbins': self.nbins,
+                'tint': self.tint,
+                # Save all configuration/limits needed for regions
+                'OFF_limits': getattr(self, 'OFF_limits', None),
+                'P1_limits': getattr(self, 'P1_limits', None),
+                'P2_limits': getattr(self, 'P2_limits', None),
+                'P3_limits': getattr(self, 'P3_limits', None),
+                'P1P2_limits': getattr(self, 'P1P2_limits', None),
+            }
+            
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            with open(cache_file, 'wb') as f:
+                pickle.dump(cache_data, f)
+            logger.info(f"Pulsar data cached to: {cache_file}")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to save cache: {e}")
+            return False
+    
+    def load_cache(self, cache_file):  # (LBZ)
+        """Load filtered pulsar data from cache.
+        
+        Restores phases, times, energies from cache, skipping 
+        expensive read/filter operations.
+        
+        Parameters:
+            cache_file (str): Path to cache file
+            
+        Returns:
+            bool: True if cache loaded successfully, False otherwise
+        """
+        try:
+            with open(cache_file, 'rb') as f:
+                cache_data = pickle.load(f)
+            
+            # Restore all cached data
+            self.phases = cache_data['phases']
+            self.times = cache_data['times']
+            self.energies = cache_data['energies']
+            self.tobs = cache_data['tobs']
+            self.telescope = cache_data['telescope']
+            self.energy_units = cache_data['energy_units']
+            self.nbins = cache_data['nbins']
+            self.tint = cache_data['tint']
+            
+            # Restore region limits
+            self.OFF_limits = cache_data.get('OFF_limits', None)
+            self.P1_limits = cache_data.get('P1_limits', None)
+            self.P2_limits = cache_data.get('P2_limits', None)
+            self.P3_limits = cache_data.get('P3_limits', None)
+            self.P1P2_limits = cache_data.get('P1P2_limits', None)
+            
+            # Create self.info DataFrame with both phase and energy columns for compatibility
+            # Energy is needed by penergy_analysis for binning (LBZ)
+            self.info = pd.DataFrame({
+                'pulsar_phase': self.phases,
+                'energy': self.energies if self.energies is not None else np.zeros(len(self.phases))
+            })
+            
+            logger.info(f"Pulsar data loaded from cache: {cache_file}")
+            logger.info(f"  - {len(self.phases)} events")
+            logger.info(f"  - {self.tobs:.2f}s observation time")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to load cache: {e}")
+            return False
+    ####################################################### (LBZ)
+
     def save_df(self, output_file, file_format="h5"):
+        """Save the phasogram data to file.
+        
+        Parameters:
+            output_file (str): Full path to output file
+            file_format (str): "h5" for HDF5 binary or "csv" for CSV text format
+        """
         if file_format == "h5":
             self.info.to_hdf(
                 output_file, key="dl2/event/telescope/parameters/LST_LSTCam"
             )
+            logger.info(f"Data saved to HDF5: {output_file}") #(LBZ)
 
         elif file_format == "csv":
-            self.info.to_csv(index=False)
+            self.info.to_csv(output_file, index=False)  #(LBZ)
+            logger.info(f"Data saved to CSV: {output_file}") #(LBZ)
 
     def save_results(self, output_file=None):
         if output_file is not None:
@@ -752,7 +894,13 @@ class PulsarAnalysis:
                 )
 
                 fitting = self.fitting.show_result()
-                fitting.to_hdf(self.output_dir + "/overall_fitting.h5", key="results")
+                # Create directory for fitting results by energy bin (LBZ) # ISSUE ? 
+                fitting_energy_dir = os.path.join(self.output_dir, "fitting_energy_bin") #(LBZ)
+                if not os.path.exists(fitting_energy_dir): #(LBZ)
+                    os.makedirs(fitting_energy_dir) #(LBZ)
+                    logging.info(f"Created fitting_energy_bin directory: {fitting_energy_dir}") #(LBZ)
+                fitting.to_hdf(os.path.join(fitting_energy_dir, "overall_fitting.h5"), key="results") #(LBZ)
+                logging.info(f"Saved overall fitting results to {os.path.join(fitting_energy_dir, 'overall_fitting.h5')}") #(LBZ)
                 # fig_width = self.show_WidthVsEnergy()  # (LBZ)
                 # if fig_width is not None:
                 #     pdf.savefig(fig_width, bbox_inches="tight", pad_inches=1)
@@ -773,15 +921,81 @@ class PulsarAnalysis:
                     pdf.savefig(time_figs[i], bbox_inches="tight", pad_inches=1)  #(LBZ)
                 if self.do_fit:
                     fit_results = self.show_EnergyFitresults() #(LBZ)
+                    print('fit_results',fit_results)
+                    print('len_fit_results',len(fit_results))
+                    # Use fitting_energy_dir created above (LBZ)
                     for idx, df in enumerate(fit_results): #(LBZ)
+                    #for idx, df in range(len(fit_results) + 1):
                         if df is not None: #(LBZ)
-                            original_bin_idx = self.EnergyAna.Parray[idx]._energy_bin_index #(LBZ)
-                            df.to_hdf(
-                                self.output_dir + f"/fitting_energy_bin{original_bin_idx}.h5", #(LBZ)
-                                key="results",
-                            ) #(LBZ)
+                            original_bin_idx = self.EnergyAna.Parray[-1]._energy_bin_index #(LBZ)
+                            fit_file = os.path.join(fitting_energy_dir, f"fitting_energy_bin{original_bin_idx}.h5") #(LBZ)
+                            df.to_hdf(fit_file, key="results") #(LBZ)
+                            logging.info(f"Saved energy bin {original_bin_idx} fitting results to {fit_file}") #(LBZ)
             except AttributeError:
                 pass
+        
+        # Save raw data if requested (LBZ) #ISSUE ? 
+        if self.save_raw_data: #(LBZ)
+            try: #(LBZ)
+                logger.info(f"Saving raw phasogram data to {self.raw_data_file} (format: {self.raw_data_format})") #(LBZ)
+                self.save_df(self.raw_data_file, file_format=self.raw_data_format) #(LBZ)
+                logger.info("Raw data saved successfully") #(LBZ)
+                
+                # Save data by energy bin if energy analysis was performed (LBZ)
+                if self.check_energyana(): #(LBZ)
+                    logger.info("Saving raw data by energy bin...") #(LBZ)
+                    self.save_raw_data_by_energy_bin() #(LBZ)
+                    logger.info("Raw data by energy bin saved successfully") #(LBZ)
+                    
+            except Exception as e: #(LBZ)
+                logger.error(f"Failed to save raw data: {e}") #(LBZ)
+
+    def save_raw_data_by_energy_bin(self): #ISSUE ? 
+        """Save filtered event data for each energy bin separately. (LBZ)"""
+        # Create subdirectory for energy bin data in phasograms folder (shared across models) (LBZ)
+        energy_bin_dir = os.path.join(
+            self.phasograms_dir, "raw_data_by_energy_bin"
+        ) #(LBZ)
+        if not os.path.exists(energy_bin_dir): #(LBZ)
+            os.makedirs(energy_bin_dir) #(LBZ)
+            logger.info(f"Created energy bin directory: {energy_bin_dir}") #(LBZ)
+        
+        # Get energy edges from analysis (LBZ)
+        energy_edges = self.EnergyAna.energy_edges #(LBZ)
+        
+        # For each energy bin, save data (LBZ)
+        for i in range(len(energy_edges) - 1): #(LBZ)
+            emin = energy_edges[i] #(LBZ)
+            emax = energy_edges[i + 1] #(LBZ)
+            
+            # Filter data for this energy bin (LBZ)
+            energy_mask = (self.info["energy"] >= emin) & (self.info["energy"] < emax) #(LBZ)
+            energy_bin_data = self.info[energy_mask] #(LBZ)
+            
+            if len(energy_bin_data) == 0: #(LBZ)
+                logger.warning(f"No data in energy bin {i}: {emin:.2f}-{emax:.2f} TeV") #(LBZ)
+                continue #(LBZ)
+            
+            # Build filename for this bin (LBZ)
+            extension = ".h5" if self.raw_data_format == "h5" else ".csv" #(LBZ)
+            bin_filename = f"energy_bin_{i:02d}_{emin:.2f}-{emax:.2f}TeV{extension}" #(LBZ)
+            bin_filepath = os.path.join(energy_bin_dir, bin_filename) #(LBZ)
+            
+            # Save data for this bin (LBZ)
+            try: #(LBZ)
+                if self.raw_data_format == "h5": #(LBZ)
+                    energy_bin_data.to_hdf( #(LBZ)
+                        bin_filepath, key="dl2/event/telescope/parameters/LST_LSTCam" #(LBZ)
+                    ) #(LBZ)
+                elif self.raw_data_format == "csv": #(LBZ)
+                    energy_bin_data.to_csv(bin_filepath, index=False) #(LBZ)
+                
+                logger.info( #(LBZ)
+                    f"Saved {len(energy_bin_data):,} events for energy bin {i} " #(LBZ)
+                    f"({emin:.2f}-{emax:.2f} TeV) to {bin_filename}" #(LBZ)
+                ) #(LBZ)
+            except Exception as e: #(LBZ)
+                logger.error(f"Failed to save energy bin {i} data: {e}") #(LBZ)
 
     def save_object(self, output_file):
         with open(output_file, "wb") as file:

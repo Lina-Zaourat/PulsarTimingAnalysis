@@ -11,10 +11,15 @@ logger = logging.getLogger(__name__) #(LBZ)
 def calculate_CountStats(on_file, off_file=None, factor=None):
     if off_file is None:
         raise ValueError("No off data given for the pulsar analysis")
-
+    elif on_file is None: #(LBZ07)
+            raise ValueError("No on data given for the pulsar analysis") #(LBZ07)
+    
     Non = len(on_file)
+    print('Non :',Non)
     Noff = len(off_file)
+    print('Noff :',Noff)
     stat = WStatCountsStatistic(n_on=Non, n_off=Noff, alpha=factor)
+    print('stat',stat)
     yerr = np.sqrt(Non + ((factor**2) * Noff))
 
     return (stat, yerr, Noff * factor)
@@ -28,7 +33,7 @@ class PhaseRegions:
         P2_object=None,
         P1P2_object=None,
         P3_object=None,
-        P1P2P3_object=None, #(LBZ)
+        #P1P2P3_object=None, #(LBZ)
     ):
         # Define background and null regions for both peaks and
         if OFF_object is None:
@@ -37,14 +42,16 @@ class PhaseRegions:
             self.OFF = OFF_object
 
         # Create the peaks in the previosly defined null regions
-        self.create_dic(P1_object, P2_object, P1P2_object, P3_object,P1P2P3_object) #(LBZ)
+        #self.create_dic(P1_object, P2_object, P1P2_object, P3_object,P1P2P3_object) #(LBZ)
+        self.create_dic(P1_object, P2_object, P1P2_object, P3_object)
 
     ##############################################
     # EXECUTION
     #############################################
 
     def create_dic(
-        self, P1_object=None, P2_object=None, P1P2_object=None, P3_object=None,P1P2P3_object=None, #(LBZ)
+        # self, P1_object=None, P2_object=None, P1P2_object=None, P3_object=None,P1P2P3_object=None, #(LBZ)
+        self, P1_object=None, P2_object=None, P1P2_object=None, P3_object=None,
     ):
         if P1_object is not None:
             self.P1 = P1_object
@@ -72,10 +79,10 @@ class PhaseRegions:
         else:
             self.P3 = None
 
-        if P1P2P3_object is not None: #(LBZ)
-            self.P1P2P3 = P1P2P3_object #(LBZ)
-        else: #(LBZ)
-            self.P1P2P3 = None #(LBZ)
+        # if P1P2P3_object is not None: #(LBZ)
+        #     self.P1P2P3 = P1P2P3_object #(LBZ)
+        # else: #(LBZ)
+        #     self.P1P2P3 = None #(LBZ)
 
         self.npeaks = npeaks
 
@@ -84,8 +91,16 @@ class PhaseRegions:
             "P2": P2_object,
             "P1+P2": P1P2_object,
             "P3": P3_object,
-            "P1+P2+P3": P1P2P3_object, #(LBZ)
+            #"P1+P2+P3": P1P2P3_object, #(LBZ)
         }
+        
+        # Initialize ratio attributes to None to ensure they always exist (TEST: defensive initialization)
+        # self.P1P2_ratio = None # TEST # ISSUE ? 
+        # self.P1P2_ratio_error = None # TEST # ISSUE ? 
+        # self.P1P3_ratio = None # TEST # ISSUE ? 
+        # self.P1P3_ratio_error = None # TEST # ISSUE ? 
+        # self.P2P3_ratio = None # TEST # ISSUE ? 
+        # self.P2P3_ratio_error = None # TEST # ISSUE ? 
 
     def remove_peak(self, name):
         del self.dic[name]
@@ -100,35 +115,39 @@ class PhaseRegions:
             self.npeaks = self.npeaks + 1
 
     def calculate_P1P2(self):
-        if self.dic["P1"] is not None and self.dic["P2"] is not None:
+        print('enter_calulate_P1P2')
+        if self.dic["P1"] is not None and self.dic["P2"] is not None :
+            print('P1.Nex',self.P1.Nex ) # (LBZ07)
+            print('P2.Nex',self.P2.Nex )# (LBZ07)
             self.P1P2_ratio = self.P1.Nex / self.P2.Nex
             self.P1P2_ratio_error = self.P1P2_ratio * np.sqrt(
                 (self.P1.yerr / self.P1.Nex) ** 2 + (self.P2.yerr / self.P2.Nex) ** 2
-            )
+                )
         else:
-            self.P1P2_ratio = None
-            self.P1P2_ratio_error = None
+             
+             self.P1P2_ratio = None
+             self.P1P2_ratio_error = None
 
-    def calculate_P1P3(self): #(LBZ)
-        if self.dic["P1"] is not None and self.dic["P3"] is not None: #(LBZ)
-            self.P1P3_ratio = self.P1.Nex / self.P3.Nex #(LBZ)
-            self.P1P3_ratio_error = self.P1P3_ratio * np.sqrt( #(LBZ)
-                (self.P1.yerr / self.P1.Nex) ** 2 + (self.P3.yerr / self.P3.Nex) ** 2 #(LBZ)
-            ) #(LBZ)
-        else:
-            self.P1P3_ratio = None #(LBZ)
-            self.P1P3_ratio_error = None #(LBZ)
+    # # def calculate_P1P3(self): #(LBZ)
+    #     if self.dic["P1"] is not None and self.dic["P3"] is not None: #(LBZ)
+    #         self.P1P3_ratio = self.P1.Nex / self.P3.Nex #(LBZ)
+    #         self.P1P3_ratio_error = self.P1P3_ratio * np.sqrt( #(LBZ)
+    #             (self.P1.yerr / self.P1.Nex) ** 2 + (self.P3.yerr / self.P3.Nex) ** 2 #(LBZ)
+    #         ) #(LBZ)
+    #     else:
+    #         self.P1P3_ratio = None #(LBZ)
+    #         self.P1P3_ratio_error = None #(LBZ)
         
-    def calculate_P2P3(self): #(LBZ)
-        if self.dic["P2"] is not None and self.dic["P3"] is not None: #(LBZ)
-            self.P2P3_ratio = self.P2.Nex / self.P3.Nex #(LBZ)
-            self.P2P3_ratio_error = self.P2P3_ratio * np.sqrt( #(LBZ)
-                (self.P2.yerr / self.P2.Nex) ** 2 + (self.P3.yerr / self.P3.Nex) ** 2 #(LBZ)
-            ) #(LBZ)
+    # def calculate_P2P3(self): #(LBZ)
+    #     if self.dic["P2"] is not None and self.dic["P3"] is not None: #(LBZ)
+    #         self.P2P3_ratio = self.P2.Nex / self.P3.Nex #(LBZ)
+    #         self.P2P3_ratio_error = self.P2P3_ratio * np.sqrt( #(LBZ)
+    #             (self.P2.yerr / self.P2.Nex) ** 2 + (self.P3.yerr / self.P3.Nex) ** 2 #(LBZ)
+    #         ) #(LBZ)
 
-        else:
-            self.P2P3_ratio = None #(LBZ)
-            self.P2P3_ratio_error = None  #(LBZ)
+    #     else:
+    #         self.P2P3_ratio = None #(LBZ)
+    #         self.P2P3_ratio_error = None  #(LBZ)
 
     ##############################################
     # RESULTS
@@ -148,8 +167,12 @@ class PhaseRegions:
             ],
         )
         for key, value in self.dic.items():
-            if value is not None:
+            #if value is not None and hasattr(value, 'sign'):  #(TEST) Check if 'sign' attribute exists before accessing it
+            if value is not None:  #(ISSUE ? )
+                # print('key:',key)
+                # print('value:',value)
                 peak_results[key] = [
+
                     value.sign,
                     value.Nex,
                     value.yerr,
@@ -158,6 +181,8 @@ class PhaseRegions:
                     value.sign_ratio,
                     value.s_n_ratio,
                 ]
+                print('value.sign',value.sign)
+                print('value.Nex',value.Nex)
 
         return peak_results
 
@@ -216,7 +241,16 @@ class PulsarPeak:
         # Define the features of the region
         self.limits = peak_limits
         self.type = peaktype
-        self.deltaP = 0
+        self.deltaP = 0.0
+        # self.sign = 0.0 # (LBZ)
+        # self.Nex = 0.0 # (LBZ)
+        # self.yerr = 0.0 # (LBZ)
+        # self.sign_ratio = 0.0 # (LBZ)
+        # self.s_n_ratio = 0.0 # (LBZ)
+        # self.noff = 0.0 # (LBZ)
+        # self.number = 0  # Initialize number attribute to prevent AttributeError
+        # self.nregions = 0  # Initialize nregions attribute to prevent AttributeError
+        # self.phases = np.array([])  # Initialize phases as empty array
         if len(self.limits) % 2 == 0:
             for i in range(1, len(self.limits), 2):
                 self.deltaP = self.deltaP + (self.limits[i] - self.limits[i - 1])
@@ -245,6 +279,7 @@ class PulsarPeak:
 
     # Make statistics if the region is signal type only
     def make_stats(self, regions, tobs):
+        print('type:',self.type)
         if self.type == "signal":
 
             # (LBZ) Enhanced version with error handling
@@ -254,6 +289,9 @@ class PulsarPeak:
                     off_file=regions.OFF.phases,
                     factor=(self.deltaP) / regions.OFF.deltaP,
                 )
+                #print('stats : ',stats)
+                #print('yerror: ', yerror)
+                #print('noff:',noff)
                 self.sign = stats.sqrt_ts.item()
                 self.Nex = stats.n_sig
                 self.yerr = yerror
@@ -264,12 +302,12 @@ class PulsarPeak:
                 # Handle cases where stats cannot be calculated (e.g., too few events, empty regions)
                 logger.warning(f"Could not calculate statistics for {getattr(self, 'name', 'unknown peak')}: {e}. Putting all the values at zero.")
                 # Set default values to prevent AttributeError
-                self.sign = 0.0 # (LBZ)
-                self.Nex = 0.0 # (LBZ)
-                self.yerr = 0.0 # (LBZ)
-                self.sign_ratio = 0.0 # (LBZ)
-                self.s_n_ratio = 0.0 # (LBZ)
-                self.noff = 0.0 # (LBZ) 
+                # self.sign = 0.0 # (LBZ)
+                # self.Nex = 0.0 # (LBZ)
+                # self.yerr = 0.0 # (LBZ)
+                # self.sign_ratio = 0.0 # (LBZ)
+                # self.s_n_ratio = 0.0 # (LBZ)
+                # self.noff = 0.0 # (LBZ) 
 
         else:
             print("Cannot calculate statistics for a background region")

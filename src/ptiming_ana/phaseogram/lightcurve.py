@@ -9,6 +9,7 @@ from .models import (
     assymetric_double_gaussian,
     double_lorentz,
     lorentzian,
+    dgaussian_step, #(LBZ)
 )
 
 __all__ = ["Lightcurve"]
@@ -62,6 +63,7 @@ class Lightcurve:
         count = 0
         for key, value in pulsar_phases.regions.dic.items():
             if value is not None:
+                #significance = getattr(value, 'sign', 0.0) #(LBZ)
                 if count == 0:
                     text_towrite = (
                         text_towrite + key + f": Sig(Li&Ma):{value.sign:.2f}$\sigma$"
@@ -265,6 +267,9 @@ class Lightcurve:
 
         elif pulsar_phases.fitting.model == "dgaussian_heaviside": #(LBZ)
             y = double_gaussian_heaviside(x, *pulsar_phases.fitting.params)  # (LBZ)
+
+        elif pulsar_phases.fitting.model == "dgaussian_step": #(LBZ)
+            y = dgaussian_step(x, *pulsar_phases.fitting.params) #(LBZ) P1+P2 gaussians + P3 step
 
         else: # (LBZ)
             return # (LBZ)

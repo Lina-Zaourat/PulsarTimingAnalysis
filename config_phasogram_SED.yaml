@@ -102,7 +102,7 @@ phase_regions:
   P2: [0.377,0.422]
   P1+P2: [0,0.026,0.377,0.422, 0.983,1]
   P3: [0.026,0.377]
-  P1+P2+P3: [0, 0.026, 0.026, 0.377, 0.377, 0.422, 0.983, 1]
+  P1+P2+P3: [0, 0.026, 0.026, 0.377, 0.377, 0.422, 0.983, 1] #(LBZ)
   
   
 
@@ -116,6 +116,13 @@ flags:
   DL2_format: False #Set to True if using DL2 files
   fits_format: False #Set to True if using FERMI data
 
+# -------- DATA CACHING (for efficient re-fitting) ---------
+# Cache the filtered data after first analysis to speed up subsequent fits
+cache:
+  save_cache: False  # Set to True to save filtered data after initialization #(LBZ)
+  use_cache: False  # Set to True to load from cache instead of re-reading/filtering #(LBZ)
+  cache_file: null  # Path to cached data file (auto-generated if null) #(LBZ)
+
 
 
 cuts:
@@ -128,7 +135,7 @@ cuts:
   # different selection creates a separate phasogram without overwriting previous results.
   # Format of output folder: ..._phasograms_zd{min}-{max}_date{YYYYMMDD}to{YYYYMMDD}/
   zd_range: [55,75] # Zenith angle range in degrees (min, max)
-  date_range: ['2014-12-14', '2029-02-01'] # Date range in ISO Format (YYYY-MM-DD)
+  date_range: ['2019-09-01', '2029-02-01'] # Date range in ISO Format (YYYY-MM-DD) #(LBZ)
   ############################ 
   max_rad: 0.2 # Not used if energy_dependent_theta is True
 
@@ -151,13 +158,13 @@ cuts:
 phase_binning:
   xmin: 0
   xmax: 1
-  nbins: 60
+  nbins: 100
   custom_binning: False
   binning: [0,0.1,0.2]
 
-#Time interval to update statistics
+# Time interval to update statistics
 time_binning:
-   run_time_analysis: True
+   run_time_analysis: True # à comprende 
    units: h
    tint: 2
 
@@ -165,7 +172,7 @@ time_binning:
 energy_binning:
    run_energy_analysis: True
    do_diff: True #Set to True if want to calculate statistics for data in each energy bin (i.e 50 GeV < E < 80 GeV)
-   do_integral: True # Set to True if want to calculate statistics for data above each energy edge (i.e E>50 GeV)
+   do_integral: False # Set to True if want to calculate statistics for data above each energy edge (i.e E>50 GeV)
    units: GeV
    emin: 10
    emax: 10000
@@ -176,8 +183,8 @@ energy_binning:
 # --------- PHASEOGRAM MODEL-----------
 # Fitting of the phaseogram given a model
 fitting:
-   run_fitting: True 
-   model: dgaussian   # Choose among gaussian, dgaussian, asym_dgaussian, double_lorentz
+   run_fitting: True
+   model: dgaussian # Choose among gaussian, dgaussian, asym_dgaussian, double_lorentz, dgaussian_heaviside,dgaussian_step
    binned: True
 
 
@@ -187,6 +194,8 @@ results:
   # Legacy fallback keys kept null for backward compatibility only.
   output_file: null
   output_directory: null
+  save_raw_data: True # Set to True to save raw phasogram data (phases, energies, times) #(LBZ)
+  raw_data_format: "h5" # Format for raw data: "h5" (binary, compact) or "csv" (text, readable) #(LBZ)
 
 
 ###############################################################
@@ -197,7 +206,7 @@ results:
 reader:
   energy_dependent_theta: True
   max_rad: 0.2
-  selected_peak: 'P1+P2+P3'  # Peak region to analyze (P1, P2, P3, P1+P2,P1+P2+P3)
+  selected_peak: 'P1+P2+P3'  # Peak region to analyze (P1, P2, P3, P1+P2,P1+P2+P3), priority to the CLI command peak choice
   # (LBZ) NOTE: zd_range is now read from cuts.zd_range for synchronization between phasogram and spectral analysis
   #
   use_DL4: False #Set to True if wants to read the DL4 files (hence no reduction of the data will be done)
@@ -232,7 +241,7 @@ spectral_points:
   emax: 10000
   units: 'GeV'
   number_points: 7  #If bins_per_decade is not False, this parameter has no effect.
-  bins_per_decade: False #Set to False if only want to set the total number_points
+  bins_per_decade: True #Set to False if only want to set the total number_points
   min_ts: 1.5
   
 

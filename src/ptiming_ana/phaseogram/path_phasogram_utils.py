@@ -64,6 +64,16 @@ def build_phasogram_output_dir(config, config_file=None, script_dir=None):
     # Get the fitting model name
     fitting_config = config.get("fitting", {})
     model_name = fitting_config.get("model", "default_model")
+
+    # fit_mode=fitting_config.get("model", "binned")
+    # if fit_mode is "True":
+    #     fit_mode='binned'
+    # elif fit_mode is "False":
+    #     fit_mode='unbinned'
+    # else: 
+    #     raise ValueError(
+    #                 "Invalid value for the binned config input"
+    #             )
     
     output_dir = os.path.join(
         output_root_dir,
@@ -71,8 +81,10 @@ def build_phasogram_output_dir(config, config_file=None, script_dir=None):
         gheff,
         theta_cont,
         f"{runs_folder}_postcuts{selection_suffix}",
-        "phasograms",  # Add phasograms subdirectory
+        "phasograms",
+        "models",  # Add phasograms subdirectory
         model_name,    # Add model-specific subdirectory
+        #fit_mode,
     )
 
     # Build output PDF filename with all postcuts info
@@ -96,7 +108,7 @@ def build_phasogram_output_dir(config, config_file=None, script_dir=None):
     
     # Add zenith (zd) range in the filename
     if isinstance(zd_range, list) and len(zd_range) == 2:
-        output_filename_parts.append(f"zdmin{int(zd_range[0])}_zdmax{int(zd_range[1])}")
+        output_filename_parts.append(f"zdmin{int(zd_range[0])}_zdmax{int(zd_range[1])}") # ATTENTION Test 
     
     output_filename = "_".join(output_filename_parts) + ".pdf"
     output_file = os.path.join(output_dir, output_filename)
