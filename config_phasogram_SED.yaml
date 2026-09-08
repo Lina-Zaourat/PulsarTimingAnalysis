@@ -25,13 +25,13 @@ paths:
   # ========== ROOT CONFIGURATION ==========
   # Workspace root directory (only used if you choose the relative way to declare paths with input_rel_dir & output_rel_dir)
   # Recommanded if the input data and the output results are in the same workspace
-  workspace_root: '/fefs/aswg/workspace/lina.bretonzaourat/Crab_analysis_DL3_sourceIndep'
+  workspace_root: '/fefs/aswg/workspace/lina.bretonzaourat/crab_analysis/src_dep_analysis/'
 
   # Input/output roots (choose one strategy):
 
   # relative strategy: set *_rel_dir (joined to workspace_root)
-  input_rel_dir: 'data/processed/DL3/Phased_pulsars'
-  output_rel_dir: 'results/preliminary'
+  input_rel_dir: '/data/dl3/dl3_lstchain_gheff0.91_alphacont0.91_lappana/phased'
+  output_rel_dir: 'results/dl3/'
 
   # (PRIORITY IF NOT NULL) absolute strategy: set *_root_dir and leave *_rel_dir unchanged/unused
   input_root_dir: null
@@ -44,18 +44,18 @@ paths:
   # ========== DATA SELECTION PARAMETERS ==========
   # gheff cut level (gheffcut_0.9 or gheffcut_0.7) and thetacont level (gheffcut_0.9 or gheffcut_0.7)
   # ONLY two options for now (standard DL3 used) 
-  gheff_cut: 'gheffcut_0.9'
-  theta_cont: 'thetacont_0.7'
+  gheff_cut: 'gheffcut_0.91'
+  theta_cont: 'thetacont_0.91'
   
   # Complete runs folder identifier (folder name where the runs .fits are stored)
-  runs_folder_name: 'Data_quality_Crab_gheff0.9_thetacont0.7_zmin0.0_zmax75.0_firstdate20200114_lastdate20251129_phased'
+  runs_folder_name: 'dl3_lstchain_gheff0.91_alphacont0.91_lappana_phased'
 
   # ========== SCRIPT EXECUTION PATHS ==========
   # Base directory where SLURM job logs will be stored
   # Each script adds its own subdirectory:
   # - phasogram_script_outputs/ for phasogram jobs
   # - sed_script_outputs/ for SED analysis jobs
-  log_output_dir: '/fefs/aswg/workspace/lina.bretonzaourat/PulsarTimingAnalysis/slurm_outputs'
+  log_output_dir: '/fefs/aswg/workspace/lina.bretonzaourat/crab_analysis/src_dep_analysis/out/out_pulsartiminganalysis'
   
   # Path to the phasogram SLURM shell script
   shell_script_path: '/fefs/aswg/workspace/lina.bretonzaourat/PulsarTimingAnalysis/src/ptiming_ana/phaseogram/phasogram_slurm.sh'
