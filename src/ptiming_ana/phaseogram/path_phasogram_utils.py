@@ -13,7 +13,7 @@ def build_phasogram_output_dir(config, config_file=None, script_dir=None):
     theta_cont = paths.get("theta_cont")
     runs_folder = paths.get("runs_folder_name")
 
-    has_minimal_paths = all([workspace, pulsar, gheff, theta_cont, runs_folder])
+    has_minimal_paths = all([workspace, gheff, theta_cont, runs_folder])
     if not has_minimal_paths:
         return {
             "input_dir": config.get("pulsar_file_dir"),
@@ -53,13 +53,11 @@ def build_phasogram_output_dir(config, config_file=None, script_dir=None):
     if not output_root_dir:
         output_root_dir = os.path.join(workspace, output_rel_dir)
 
-    input_dir = os.path.join(
-        input_root_dir,
-        pulsar,
-        gheff,
-        theta_cont,
-        runs_folder,
-    )
+    input_dir_parts = [input_root_dir]
+    if pulsar:
+        input_dir_parts.append(pulsar)
+    input_dir_parts.extend([gheff, theta_cont, runs_folder])
+    input_dir = os.path.join(*input_dir_parts)
 
     # Get the fitting model name
     fitting_config = config.get("fitting", {})
@@ -75,17 +73,18 @@ def build_phasogram_output_dir(config, config_file=None, script_dir=None):
     #                 "Invalid value for the binned config input"
     #             )
     
-    output_dir = os.path.join(
-        output_root_dir,
-        pulsar,
+    output_dir_parts = [output_root_dir]
+    if pulsar:
+        output_dir_parts.append(pulsar)
+    output_dir_parts.extend([
         gheff,
         theta_cont,
         f"{runs_folder}_postcuts{selection_suffix}",
         "phasograms",
-        "models",  # Add phasograms subdirectory
-        model_name,    # Add model-specific subdirectory
-        #fit_mode,
-    )
+        "models",
+        model_name,
+    ])
+    output_dir = os.path.join(*output_dir_parts)
 
     # Build output PDF filename with all postcuts info
     output_filename_parts = ["phasograms"]
