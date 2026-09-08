@@ -55,9 +55,12 @@ python add_DL3_phase_table.py
 """
 
 import argparse
+import logging #(LBZ020926)
 import os
 import warnings
 from ptiming_ana.cphase.pulsarphase_cal import DL3_calphase
+
+logger = logging.getLogger(__name__) #(LBZ020926) 
 
 
 def main():
@@ -177,13 +180,18 @@ def main():
             )
 
         filelist = []
-        for x in os.listdir(args.directory):
-            rel_dir = os.path.relpath(args.directory)
-            rel_file = os.path.join(rel_dir, x)
-            if run in rel_file:
-                filelist.append(rel_file)
+        for root, dirs, files in os.walk(args.directory): #(LBZ020926)
+            for x in files: #(LBZ020926)
+                if x.endswith(".fits") and "dl3_LST-1" in x and run in x: #(LBZ020926)
+                    filelist.append(os.path.join(root, x)) #(LBZ020926)
 
-        filelist.sort()
+        filelist.sort() #(LBZ020926)
+
+        if not filelist:
+            logger.warning(f"No files matching run '{run}' found in {args.directory}") #(LBZ020926) 
+        else:
+            logger.info(f"Found {len(filelist)} file(s) matching run '{run}' in {args.directory}") #(LBZ020926)
+
         for i in range(0, len(filelist)):
             # Calculate the phases
             DL3_calphase(
