@@ -39,7 +39,7 @@ paths:
   
   # ========== PULSAR IDENTIFICATION ==========
   # Target pulsar name
-  pulsar_name: 'Crab'
+  pulsar_name: null
   
   # ========== DATA SELECTION PARAMETERS ==========
   # gheff cut level (gheffcut_0.9 or gheffcut_0.7) and thetacont level (gheffcut_0.9 or gheffcut_0.7)
