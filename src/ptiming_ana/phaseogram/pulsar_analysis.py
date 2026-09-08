@@ -550,19 +550,19 @@ class PulsarAnalysis:
     def execute_stats(self, tobs):
         # Update the information at a certain interval of time and store final values
         self.TimeEv.run(self)
-        print('check_run')
+        #print('check_run')
 
         # COmpute P1/P2 ratio
         self.regions.calculate_P1P2()
-        print('check_calculate_P1P2')
+        #print('check_calculate_P1P2')
 
         # Set the final effective time of observation
         self.tobs = tobs
-        print('tobs_ok')
+        #print('tobs_ok')
 
         # Fit the histogram using PeakFitting class. If binned is False, an Unbinned Likelihood method is used for the fitting
         if self.do_fit:
-            print('enter_loop')
+            #print('enter_loop')
             logger.info("Fitting the data to the given model...")
             logger.info("Fit model: " + self.fit_model)
             logger.info("Binned fitting: " + str(self.binned))
@@ -583,7 +583,7 @@ class PulsarAnalysis:
         self.execute_stats(self.r.tobs)
 
         # Execute stats in energy bins
-        print('self.EnergyAna',self.EnergyAna)
+        #print('self.EnergyAna',self.EnergyAna)
         try:
             logger.info("Performing energy-dependent analysis...")
             self.EnergyAna.run(self)
@@ -659,7 +659,7 @@ class PulsarAnalysis:
 
     def show_fit_results(self):
         fresult = self.fitting.show_result()
-        print(fresult)
+        #print(fresult)
         return fresult
 
     def show_timeEvolution(self):

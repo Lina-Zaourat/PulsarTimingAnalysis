@@ -62,7 +62,7 @@ def find_run_files(path,file_format=".fits"): #(LBZ)
 # The folder path that contains the runs in a .fits format (output of Edna's dashboard)
 ############################################################################################################################
 #runs_folder_name='Data_quality_Crab_gheff0.9_thetacont0.7_zmin0.0_zmax75.0_firstdate20200114_lastdate20251129'
-runs_folder_name='dl3_lstchain_gheff0.91_alphacont0.91'
+runs_folder_name='dl3_lstchain_gheff0.91_alphacont0.91_lappana'
 pulsar_name= 'Crab'
 gheff_cut= 0.91 # (0.7 or 0.9)
 thetacont= 0.91 # (0.7 or 0.9)

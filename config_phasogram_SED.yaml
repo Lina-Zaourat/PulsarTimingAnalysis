@@ -30,7 +30,7 @@ paths:
   # Input/output roots (choose one strategy):
 
   # relative strategy: set *_rel_dir (joined to workspace_root)
-  input_rel_dir: '/data/dl3/dl3_lstchain_gheff0.91_alphacont0.91_lappana/phased'
+  input_rel_dir: 'data/dl3/dl3_lstchain_gheff0.91_alphacont0.91_lappana/phased'
   output_rel_dir: 'results/dl3/'
 
   # (PRIORITY IF NOT NULL) absolute strategy: set *_root_dir and leave *_rel_dir unchanged/unused
