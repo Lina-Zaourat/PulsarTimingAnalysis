@@ -70,11 +70,11 @@ thetacont= 0.91 # (0.7 or 0.9)
 
 
 # The workspace path 
-workspace_crab_path= '/fefs/aswg/workspace/lina.bretonzaourat/Crab_analysis_sourcedep'
+workspace_crab_path= '/fefs/aswg/workspace/lina.bretonzaourat/crab_analysis/src_dep_analysis'
 script_dir = Path(__file__).resolve().parent # LBZ_280826
 phase_script = script_dir / "add_DL3_phase.sh" # LBZ_280826
 
-file_ephem = "/fefs/aswg/workspace/lina.bretonzaourat/Pulsars/add_phase/Crab.gro"
+file_ephem = "/fefs/aswg/workspace/lina.bretonzaourat/PulsarTimingAnalysis/src/ptiming_ana/cphase/Crab.gro"
 
 # Extract the pulsar name to create a folder named as the pulsar 
 match_name = re.search(r"Data_quality_([a-zA-Z]+)", runs_folder_name)
@@ -83,26 +83,26 @@ if match_name:
     print('-'*50)
     print(f"Extracted pulsar name: {pulsar_name}")
     # Create a directory for the pulsar results
-    output_path_dir= f"{workspace_crab_path}/data/processed/DL3/Phased_pulsars"
+    output_path_dir= f"{workspace_crab_path}/data/dl3/dl3_lstchain_gheff0.91_alphacont0.91_lappana/phased"
     pulsar_path_dir = os.path.join(output_path_dir, pulsar_name)
     os.makedirs(pulsar_path_dir, exist_ok=True)
 #     print(f"Directory '{pulsar_path_dir}' created successfully.")
 else:
      print("No pulsar name found in the string.")
-     output_path_dir= f"{workspace_crab_path}/data/processed/DL3/Phased_pulsars"
+     output_path_dir= f"{workspace_crab_path}/data/dl3/dl3_lstchain_gheff0.91_alphacont0.91_lappana/phased"
      os.makedirs(output_path_dir, exist_ok=True)
  
 #dir_input_DL3 = f"/{workspace_crab_path}/data/raw/DL3/{pulsar_name}/gheffcut_{gheff_cut}/thetacont_{thetacont}/{runs_folder_name}"
-dir_input_DL3 = f"{workspace_crab_path}/dl3_lstchain_gheff0.91_alphacont0.91/"
+dir_input_DL3 = f"{workspace_crab_path}/data/dl3/dl3_lstchain_gheff0.91_alphacont0.91_lappana"
 #gammalearn 
 #dir_input_DL3= "/fefs/aswg/workspace/guillaume.grolleron/project/LSTanalysis/Crab-GL-perf/DVR/out/dl3"
 
-dir_output_DL3 =  f"{workspace_crab_path}/data/processed/DL3/Phased_pulsars/{pulsar_name}/gheffcut_{gheff_cut}/thetacont_{thetacont}/{runs_folder_name}_phased"
+dir_output_DL3 =  f"{workspace_crab_path}/data/dl3/dl3_lstchain_gheff0.91_alphacont0.91_lappana/phased/crab/gheffcut_{gheff_cut}/thetacont_{thetacont}/{runs_folder_name}_phased"
 #dir_output_DL3 = f"/{workspace_crab_path}/data/processed/DL3/Phased_pulsars/{pulsar_name}/gheffcut_{gheff_cut}/thetacont_{thetacont}/{runs_folder_name}_phased"
 #gammalearn
 #dir_output_DL3="/fefs/aswg/workspace/lina.bretonzaourat/workspace/Crab_analysis_sourceindep/dl3_gammalearn/dl3_phased"
 
-file_ephem = "/fefs/aswg/workspace/lina.bretonzaourat/Pulsars/add_phase/Crab.gro"
+file_ephem = "/fefs/aswg/workspace/lina.bretonzaourat/PulsarTimingAnalysis/src/ptiming_ana/cphase/Crab.gro"
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-r', '--run_number', dest='run_number', help='Add the phases only for the specified run')
@@ -113,9 +113,9 @@ args = parser.parse_args()
 if not args.run_number:
 
     # Move previous job output files to another directory
-    if not os.path.exists("out/previous_jobs"):
-        os.makedirs("out/previous_jobs")
-    cmd = "mv out/*.out out/previous_jobs/"
+    if not os.path.exists("out/out_phase_job/previous_jobs"):
+        os.makedirs("out/out_phase_job/previous_jobs")
+    cmd = "mv out/*.out out/out_phase_job/previous_jobs/"
     subprocess.run(cmd, shell=True)
 
     #pattern = re.compile(r"dl3_LST-1\.Run(\d+)\_gh0.7_th0.7_nsb0.38_ring-wobble.fits$")
