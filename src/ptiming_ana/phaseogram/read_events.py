@@ -228,7 +228,8 @@ class ReadDL3File:
             }
         )
 
-        info = add_delta_t_key(info)
+        #info = add_delta_t_key(info) #LBZ (06102026)
+        info = add_delta_t_key(info).reset_index(drop=True) #LBZ (06102026)
         
         ######################################################################## (LBZ)
         # Apply date cuts POST-FILTER at event level (safety check)
