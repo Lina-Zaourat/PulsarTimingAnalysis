@@ -33,6 +33,10 @@ class PulsarTimeAnalysis:
         self.P1P2exTime = [0]
         self.P1P2exerror = [0]
 
+        # MJD date (end of bin) corresponding to each point of the time evolution
+        # Aligned with self.t: bin_dates[0] = None (initial value)
+        self.bin_dates = [None]
+
         # Define the time interval
         self.tint = tint
 
@@ -75,8 +79,12 @@ class PulsarTimeAnalysis:
 
         try:
             pulsar_phases.mjd_times = np.array(dataframe.mjd_time.to_list())
+            if len(pulsar_phases.mjd_times) > 0:
+                self.bin_dates.append(float(np.max(pulsar_phases.mjd_times)))
+            else:
+                self.bin_dates.append(None)
         except AttributeError:
-            pass
+            self.bin_dates.append(None)
 
         if "delta_t" in pulsar_phases.info:
             diff = pulsar_phases.info.delta_t
@@ -128,6 +136,50 @@ class PulsarTimeAnalysis:
             else:
                 diff[i] = 0
 
+    def _add_month_grid(self, ax, x_values, show_labels=True):
+        # Add vertical grid lines at month boundaries, labelled by month.
+        # x_values : cumulative observation time in the SAME units as the axis.
+        # It must be aligned with self.bin_dates (same length, same order).
+        from astropy.time import Time
+
+        valid = [
+            (x_values[i], self.bin_dates[i])
+            for i in range(len(self.bin_dates))
+            if self.bin_dates[i] is not None and i < len(x_values)
+        ]
+
+        if len(valid) < 2:
+            return
+
+        x_vals, dates_mjd = zip(*valid)
+        x_vals = np.array(x_vals)
+        dates_py = Time(np.array(dates_mjd), format="mjd", scale="utc").datetime
+
+        prev_ym = (dates_py[0].year, dates_py[0].month)
+        for i in range(1, len(dates_py)):
+            curr_ym = (dates_py[i].year, dates_py[i].month)
+            if curr_ym != prev_ym:
+                # Interpolate the cumulative time at the month boundary
+                x_mid = (x_vals[i - 1] + x_vals[i]) / 2
+                ax.axvline(x=x_mid, color="grey", linestyle="--", alpha=0.4, zorder=0)
+
+                if show_labels:
+                    label = dates_py[i].strftime("%b %Y")
+                    ax.text(
+                        x_mid,
+                        0.98,
+                        label,
+                        ha="center",
+                        va="top",
+                        fontsize=7,
+                        transform=ax.get_xaxis_transform(),
+                        clip_on=False,
+                        bbox=dict(
+                            facecolor="white", alpha=0.7, edgecolor="none", pad=1
+                        ),
+                    )
+            prev_ym = curr_ym
+
     ##############################################
     # RESULTS
     #############################################
@@ -169,6 +221,8 @@ class PulsarTimeAnalysis:
                 color="tab:green",
                 label="P2",
             )
+
+        self._add_month_grid(plt.gca(), np.array(self.t) / 3600, show_labels=True)
 
         plt.xlabel("Time of observation (h)")
         plt.ylabel("Significance ($\sigma$)")
@@ -419,6 +473,13 @@ class PulsarTimeAnalysis:
         ax4.set_ylabel("Significance (sigma)")  #(LBZ)
         ax4.set_title("P3")  #(LBZ)
 
+        # Month date grid (vertical lines at month boundaries)
+        x_vals = np.array(self.t) / 3600
+        self._add_month_grid(ax1, x_vals, show_labels=False)
+        self._add_month_grid(ax2, x_vals, show_labels=True)
+        self._add_month_grid(ax3, x_vals, show_labels=False)
+        self._add_month_grid(ax4, x_vals, show_labels=False)
+
         plt.tight_layout()
         plt.show()
 
@@ -665,6 +726,13 @@ class PulsarTimeAnalysis:
         ax4.set_ylabel("Number of excess events")  #(LBZ)
         ax4.set_title("P3")  #(LBZ)
 
+        # Month date grid (vertical lines at month boundaries)
+        x_vals = np.array(self.t) / 3600
+        self._add_month_grid(ax1, x_vals, show_labels=False)
+        self._add_month_grid(ax2, x_vals, show_labels=True)
+        self._add_month_grid(ax3, x_vals, show_labels=False)
+        self._add_month_grid(ax4, x_vals, show_labels=False)
+
         plt.tight_layout()
         plt.show()
 
@@ -851,6 +919,13 @@ class PulsarTimeAnalysis:
         ax3.set_xlabel("Time of observation (h)")
         ax3.set_ylabel("Significance (sigma)")
         ax3.set_title("Chi square test")
+
+        # Month date grid (vertical lines at month boundaries)
+        x_vals = np.array(self.t) / 3600
+        self._add_month_grid(ax1, x_vals, show_labels=False)
+        self._add_month_grid(ax2, x_vals, show_labels=True)
+        self._add_month_grid(ax3, x_vals, show_labels=False)
+
         plt.tight_layout()
         plt.show()
 

@@ -244,6 +244,7 @@ def main(config_path, output_dir=None):
         time_binning = h.TimeEv.t
         P1_sign = h.TimeEv.P1sTime
         plt.plot(time_binning, P1_sign, 'o-', color='C1')
+        h.TimeEv._add_month_grid(plt.gca(), h.TimeEv.t, show_labels=True)
         plt.xlabel('Time of observation (s)')
         plt.ylabel('Significance (sigma)')
         plt.title('P1 Significance vs Time')
